@@ -1,0 +1,115 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:PackingTexture.App.ViewModels"
+        x:Class="PackingTexture.App.Views.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Title="PackingTexture"
+        Width="1180"
+        Height="720"
+        MinWidth="980"
+        MinHeight="620">
+  <Design.DataContext>
+    <vm:MainWindowViewModel />
+  </Design.DataContext>
+
+  <Grid ColumnDefinitions="460,*" RowDefinitions="*" Margin="12" ColumnSpacing="12">
+    <Border Grid.Column="0" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="6" Background="#F8FAFC">
+      <DockPanel>
+        <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="12">
+          <TextBlock Text="Sources &amp; Channel Packing" FontWeight="SemiBold" VerticalAlignment="Center" />
+          <Button Grid.Column="1" Content="Add Images" Click="AddImages_OnClick" />
+        </Grid>
+
+        <Border DockPanel.Dock="Top" Margin="12,0,12,12" Padding="12" BorderBrush="#BFDBFE" BorderThickness="1" Background="#EFF6FF" CornerRadius="6">
+          <TextBlock Text="Drag PNG / TGA / BMP / JPG source images here" HorizontalAlignment="Center" Foreground="#475569" />
+        </Border>
+
+        <ListBox DockPanel.Dock="Top" ItemsSource="{Binding SourceImages}" Height="170" Margin="12,0,12,12">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:SourceImageViewModel">
+              <Grid ColumnDefinitions="*,Auto" Margin="4">
+                <StackPanel>
+                  <TextBlock Text="{Binding FileName}" FontWeight="SemiBold" />
+                  <TextBlock Text="{Binding Dimensions}" Foreground="#64748B" FontSize="12" />
+                  <TextBlock Text="{Binding ChannelSummary}" Foreground="#64748B" FontSize="12" />
+                </StackPanel>
+                <TextBlock Grid.Column="1" Text="&#x2261;" Foreground="#64748B" VerticalAlignment="Center" />
+              </Grid>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+
+        <StackPanel Margin="12" Spacing="8">
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Text="Output Channels" FontWeight="SemiBold" />
+            <TextBlock Grid.Column="1" Text="Auto assigned from source order" Foreground="#64748B" FontSize="12" />
+          </Grid>
+
+          <ItemsControl ItemsSource="{Binding Mappings}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate>
+                <Grid ColumnDefinitions="42,*,110" Margin="0,4" ColumnSpacing="8" x:CompileBindings="False">
+                  <TextBlock Text="{Binding OutputChannel}" FontWeight="Bold" FontSize="20" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                  <ComboBox Grid.Column="1"
+                            ItemsSource="{Binding DataContext.SourceImages, RelativeSource={RelativeSource AncestorType=Window}}"
+                            SelectedValue="{Binding Mapping.SourceImageId}"
+                            SelectedValueBinding="{Binding Id}"
+                            HorizontalAlignment="Stretch">
+                    <ComboBox.ItemTemplate>
+                      <DataTemplate x:DataType="vm:SourceImageViewModel">
+                        <TextBlock Text="{Binding FileName}" />
+                      </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                  </ComboBox>
+                  <ComboBox Grid.Column="2"
+                            ItemsSource="{Binding DataContext.ChannelOptions, RelativeSource={RelativeSource AncestorType=Window}}"
+                            SelectedItem="{Binding Mapping.SourceChannel}"
+                            HorizontalAlignment="Stretch">
+                  </ComboBox>
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+      </DockPanel>
+    </Border>
+
+    <Border Grid.Column="1" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="6" Background="#F8FAFC">
+      <DockPanel>
+        <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="12">
+          <TextBlock Text="Preview &amp; Export" FontWeight="SemiBold" />
+          <TextBlock Grid.Column="1" Text="{Binding StatusText}" Foreground="#64748B" FontSize="12" />
+        </Grid>
+
+        <Border Margin="12" BorderBrush="#CBD5E1" BorderThickness="1" CornerRadius="6" Background="#E2E8F0" Height="380">
+          <Image Source="{Binding PreviewBitmap}" Stretch="Uniform" />
+        </Border>
+
+        <StackPanel DockPanel.Dock="Bottom" Margin="12" Spacing="10">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <RadioButton Content="RGBA" GroupName="Preview" IsChecked="True" IsCheckedChanged="PreviewMode_OnChecked" Tag="Rgba" />
+            <RadioButton Content="R" GroupName="Preview" IsCheckedChanged="PreviewMode_OnChecked" Tag="R" />
+            <RadioButton Content="G" GroupName="Preview" IsCheckedChanged="PreviewMode_OnChecked" Tag="G" />
+            <RadioButton Content="B" GroupName="Preview" IsCheckedChanged="PreviewMode_OnChecked" Tag="B" />
+            <RadioButton Content="A" GroupName="Preview" IsCheckedChanged="PreviewMode_OnChecked" Tag="A" />
+          </StackPanel>
+
+          <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
+            <StackPanel Spacing="6">
+              <TextBlock Text="Format" FontWeight="SemiBold" />
+              <ComboBox ItemsSource="{Binding ExportFormats}" SelectedItem="{Binding SelectedExportFormat}" />
+            </StackPanel>
+
+            <StackPanel Grid.Column="1" Spacing="6">
+              <TextBlock Text="Options" FontWeight="SemiBold" />
+              <CheckBox Content="Mipmaps" IsChecked="{Binding GenerateMipMaps}" />
+              <CheckBox Content="Flip Y / green channel" IsChecked="{Binding FlipY}" />
+            </StackPanel>
+          </Grid>
+
+          <Button Content="Export" HorizontalAlignment="Stretch" HorizontalContentAlignment="Center" Click="Export_OnClick" />
+        </StackPanel>
+      </DockPanel>
+    </Border>
+  </Grid>
+</Window>

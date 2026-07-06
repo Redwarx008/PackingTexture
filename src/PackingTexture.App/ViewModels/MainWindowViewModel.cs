@@ -116,6 +116,9 @@ public sealed partial class MainWindowViewModel : ObservableObject
         ExportFormat.DdsBc7
     ];
 
+    public IReadOnlyList<ChannelId> ChannelOptions { get; } =
+        Enum.GetValues<ChannelId>();
+
     public async Task AddImagesAsync(IReadOnlyList<string> paths, CancellationToken cancellationToken = default)
     {
         foreach (var path in paths)
