@@ -13,6 +13,8 @@ namespace PackingTexture.App.Views;
 
 public partial class MainWindow : Window
 {
+    private sealed record ImportPathSplit(string[] AcceptedPaths, string[] RejectedMessages);
+
     private static readonly HashSet<string> SupportedImportExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
         ".png",
@@ -28,6 +30,16 @@ public partial class MainWindow : Window
         DataContext = new MainWindowViewModel();
     }
 
+    protected override void OnClosed(EventArgs e)
+    {
+        if (DataContext is IDisposable disposable)
+        {
+            disposable.Dispose();
+        }
+
+        base.OnClosed(e);
+    }
+
     private async void AddImages_OnClick(object? sender, RoutedEventArgs e)
     {
         if (DataContext is not MainWindowViewModel viewModel)
@@ -35,35 +47,45 @@ public partial class MainWindow : Window
             return;
         }
 
-        var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        try
         {
-            Title = "Add Images",
-            AllowMultiple = true,
-            FileTypeFilter =
-            [
-                new FilePickerFileType("Images")
-                {
-                    Patterns =
-                    [
-                        "*.png",
-                        "*.jpg",
-                        "*.jpeg",
-                        "*.bmp",
-                        "*.tga"
-                    ]
-                }
-            ]
-        });
+            var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+            {
+                Title = "Add Images",
+                AllowMultiple = true,
+                FileTypeFilter =
+                [
+                    new FilePickerFileType("Images")
+                    {
+                        Patterns =
+                        [
+                            "*.png",
+                            "*.jpg",
+                            "*.jpeg",
+                            "*.bmp",
+                            "*.tga"
+                        ]
+                    }
+                ]
+            });
 
-        var paths = files
-            .Select(file => file.TryGetLocalPath())
-            .Where(path => path is not null)
-            .Select(path => path!)
-            .ToArray();
+            var paths = files
+                .Select(file => file.TryGetLocalPath())
+                .Where(path => path is not null)
+                .Select(path => path!)
+                .ToArray();
 
-        if (paths.Length > 0)
+            if (paths.Length > 0)
+            {
+                await viewModel.AddImagesAsync(paths);
+            }
+        }
+        catch (OperationCanceledException)
         {
-            await viewModel.AddImagesAsync(paths);
+        }
+        catch (Exception ex)
+        {
+            viewModel.StatusText = $"Add images failed: {ex.Message}";
         }
     }
 
@@ -74,28 +96,38 @@ public partial class MainWindow : Window
             return;
         }
 
-        var extension = viewModel.SelectedExportFormat == ExportFormat.Png ? "png" : "dds";
-        var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        try
         {
-            Title = "Export Packed Texture",
-            DefaultExtension = extension,
-            SuggestedFileName = $"packed.{extension}",
-            FileTypeChoices =
-            [
-                new FilePickerFileType(extension.Equals("png", StringComparison.OrdinalIgnoreCase) ? "PNG Image" : "DDS Texture")
-                {
-                    Patterns =
-                    [
-                        $"*.{extension}"
-                    ]
-                }
-            ]
-        });
+            var extension = viewModel.SelectedExportFormat == ExportFormat.Png ? "png" : "dds";
+            var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+            {
+                Title = "Export Packed Texture",
+                DefaultExtension = extension,
+                SuggestedFileName = $"packed.{extension}",
+                FileTypeChoices =
+                [
+                    new FilePickerFileType(extension.Equals("png", StringComparison.OrdinalIgnoreCase) ? "PNG Image" : "DDS Texture")
+                    {
+                        Patterns =
+                        [
+                            $"*.{extension}"
+                        ]
+                    }
+                ]
+            });
 
-        var path = file?.TryGetLocalPath();
-        if (!string.IsNullOrWhiteSpace(path) && viewModel.ExportCommand.CanExecute(path))
+            var path = file?.TryGetLocalPath();
+            if (!string.IsNullOrWhiteSpace(path) && viewModel.ExportCommand.CanExecute(path))
+            {
+                await viewModel.ExportCommand.ExecuteAsync(path);
+            }
+        }
+        catch (OperationCanceledException)
         {
-            await viewModel.ExportCommand.ExecuteAsync(path);
+        }
+        catch (Exception ex)
+        {
+            viewModel.StatusText = $"Export failed: {ex.Message}";
         }
     }
 
@@ -106,28 +138,87 @@ public partial class MainWindow : Window
             return;
         }
 
-        var files = FilterSupportedImportPaths(e.DataTransfer.TryGetFiles()?
-            .Select(file => file.TryGetLocalPath())
-            .Where(path => !string.IsNullOrWhiteSpace(path))
-            .Select(path => path!)
-            .ToArray());
-
-        if (files is { Length: > 0 })
+        try
         {
-            await viewModel.AddImagesAsync(files);
+            var split = SplitImportPaths(e.DataTransfer.TryGetFiles()?
+                .Select(file => file.TryGetLocalPath())
+                .Where(path => !string.IsNullOrWhiteSpace(path))
+                .Select(path => path!)
+                .ToArray());
+
+            if (split.AcceptedPaths.Length > 0)
+            {
+                await viewModel.AddImagesAsync(split.AcceptedPaths);
+            }
+
+            if (split.RejectedMessages.Length > 0)
+            {
+                viewModel.StatusText = AppendStatus(viewModel.StatusText, BuildRejectedDropStatus(split.RejectedMessages));
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            viewModel.StatusText = $"Drop failed: {ex.Message}";
         }
     }
 
     private static string[] FilterSupportedImportPaths(IEnumerable<string>? paths) =>
-        paths is null
-            ? []
-            : paths.Where(IsSupportedImportPath).ToArray();
+        SplitImportPaths(paths).AcceptedPaths;
+
+    private static ImportPathSplit SplitImportPaths(IEnumerable<string>? paths)
+    {
+        if (paths is null)
+        {
+            return new ImportPathSplit([], []);
+        }
+
+        var acceptedPaths = new List<string>();
+        var rejectedMessages = new List<string>();
+
+        foreach (var path in paths)
+        {
+            if (IsSupportedImportPath(path))
+            {
+                acceptedPaths.Add(path);
+                continue;
+            }
+
+            var fileName = Path.GetFileName(path);
+            rejectedMessages.Add($"Unsupported file type: {fileName}");
+        }
+
+        return new ImportPathSplit(acceptedPaths.ToArray(), rejectedMessages.ToArray());
+    }
 
     private static bool IsSupportedImportPath(string path)
     {
         var extension = Path.GetExtension(path);
         return !string.IsNullOrWhiteSpace(extension) && SupportedImportExtensions.Contains(extension);
     }
+
+    private static string BuildRejectedDropStatus(IReadOnlyList<string> rejectedMessages)
+    {
+        if (rejectedMessages.Count == 1)
+        {
+            return rejectedMessages[0];
+        }
+
+        var summary = string.Join("; ", rejectedMessages.Take(3));
+        if (rejectedMessages.Count > 3)
+        {
+            summary = $"{summary}; +{rejectedMessages.Count - 3} more";
+        }
+
+        return summary;
+    }
+
+    private static string AppendStatus(string currentStatus, string nextStatus) =>
+        string.IsNullOrWhiteSpace(currentStatus)
+            ? nextStatus
+            : $"{currentStatus} {nextStatus}";
 
     private void PreviewMode_OnChecked(object? sender, RoutedEventArgs e)
     {

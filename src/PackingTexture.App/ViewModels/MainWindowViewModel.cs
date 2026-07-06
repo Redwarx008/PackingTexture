@@ -193,7 +193,7 @@ public sealed partial class ChannelMappingViewModel : ObservableObject
     }
 }
 
-public sealed partial class MainWindowViewModel : ObservableObject
+public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 {
     private readonly Func<string, CancellationToken, Task<SourceImage>> _importAsync;
     private readonly Func<PackedImage, string, ExportSettings, CancellationToken, Task> _exportAsync;
@@ -201,6 +201,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
     private Guid? _primarySourceId;
     private PackedImage? _packedImage;
     private AvaloniaBitmap? _previewBitmap;
+    private bool _disposed;
 
     public MainWindowViewModel()
         : this(ImageImportService.ImportAsync, TextureExportService.ExportAsync)
@@ -463,4 +464,29 @@ public sealed partial class MainWindowViewModel : ObservableObject
         string.IsNullOrWhiteSpace(currentStatus)
             ? nextStatus
             : $"{currentStatus} {nextStatus}";
+
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+
+        _packedImage?.Dispose();
+        _packedImage = null;
+
+        PreviewBitmap = null;
+
+        foreach (var source in _sources)
+        {
+            source.Pixels.Dispose();
+        }
+
+        _sources.Clear();
+        SourceImages.Clear();
+        Mappings.Clear();
+        _primarySourceId = null;
+    }
 }

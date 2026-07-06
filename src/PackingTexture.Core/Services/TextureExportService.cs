@@ -16,14 +16,60 @@ public static class TextureExportService
     {
         ValidateExtension(path, settings.Format);
 
-        await using var stream = File.Create(path);
-        if (settings.Format == ExportFormat.Png)
+        var fullPath = Path.GetFullPath(path);
+        var directory = Path.GetDirectoryName(fullPath);
+        if (string.IsNullOrWhiteSpace(directory))
         {
-            await image.Pixels.SaveAsPngAsync(stream, cancellationToken);
+            throw new InvalidOperationException("Export path must include a directory.");
+        }
+
+        var tempPath = Path.Combine(directory, $".{Path.GetFileName(fullPath)}.{Guid.NewGuid():N}.tmp");
+
+        try
+        {
+            await using (var stream = new FileStream(tempPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+            {
+                if (settings.Format == ExportFormat.Png)
+                {
+                    await image.Pixels.SaveAsPngAsync(stream, cancellationToken);
+                }
+                else
+                {
+                    var encoder = CreateEncoder(settings);
+                    await encoder.EncodeToStreamAsync(image.Pixels, stream, cancellationToken);
+                }
+            }
+
+            ReplaceTempFile(tempPath, fullPath);
+        }
+        catch
+        {
+            DeleteIfExists(tempPath);
+            throw;
+        }
+    }
+
+    private static void ReplaceTempFile(string tempPath, string destinationPath)
+    {
+        if (File.Exists(destinationPath))
+        {
+            File.Replace(tempPath, destinationPath, destinationBackupFileName: null);
             return;
         }
 
-        var encoder = new BcEncoder
+        File.Move(tempPath, destinationPath);
+    }
+
+    private static void DeleteIfExists(string path)
+    {
+        if (File.Exists(path))
+        {
+            File.Delete(path);
+        }
+    }
+
+    private static BcEncoder CreateEncoder(ExportSettings settings) =>
+        new()
         {
             OutputOptions =
             {
@@ -33,9 +79,6 @@ public static class TextureExportService
                 Format = ToCompressionFormat(settings.Format)
             }
         };
-
-        await encoder.EncodeToStreamAsync(image.Pixels, stream, cancellationToken);
-    }
 
     private static void ValidateExtension(string path, ExportFormat format)
     {

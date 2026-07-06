@@ -70,6 +70,35 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
+    public void SplitImportPaths_ReturnsAcceptedPaths_AndRejectedMessages()
+    {
+        var method = typeof(AppWindow)
+            .GetMethod("SplitImportPaths", BindingFlags.NonPublic | BindingFlags.Static);
+
+        Assert.NotNull(method);
+
+        var result = method!.Invoke(null, [new[]
+        {
+            "C:/tmp/one.png",
+            "C:/tmp/two.dds",
+            "C:/tmp/three.JPEG",
+            "C:/tmp/four.gif"
+        }]);
+
+        Assert.NotNull(result);
+
+        var acceptedPaths = (string[]?)result!.GetType().GetProperty("AcceptedPaths", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(result);
+        var rejectedMessages = (string[]?)result.GetType().GetProperty("RejectedMessages", BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic)?.GetValue(result);
+
+        Assert.Equal(["C:/tmp/one.png", "C:/tmp/three.JPEG"], acceptedPaths);
+        Assert.Equal(
+        [
+            "Unsupported file type: two.dds",
+            "Unsupported file type: four.gif"
+        ], rejectedMessages);
+    }
+
+    [Fact]
     public async Task AddImagesAsync_ContinuesPastFailedImports_AndReportsInlineStatus()
     {
         var goodSource = CreateSourceImage(
@@ -116,6 +145,36 @@ public sealed class MainWindowViewModelTests
         Assert.Contains("Disk full", viewModel.StatusText, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public async Task Dispose_ReleasesImportedImages_AndClearsPreviewResources()
+    {
+        var sourceScope = CreateSourceImage(
+            Guid.Parse("33333333-3333-3333-3333-333333333333"),
+            "dispose.png",
+            2,
+            2,
+            SourceChannelSet.Rgba,
+            new Rgba32(70, 80, 90, 255));
+        var source = sourceScope.Source;
+        sourceScope.Detach();
+
+        var viewModel = new MainWindowViewModel(
+            importAsync: (_, _) => Task.FromResult(source),
+            exportAsync: (_, _, _, _) => Task.CompletedTask);
+
+        await viewModel.AddImagesAsync(["C:/tmp/dispose.png"]);
+        using var packedPixels = new Image<Rgba32>(2, 2);
+        SetPrivateField(viewModel, "_packedImage", new PackedImage(packedPixels.Clone(), hadResizedSources: false));
+
+        viewModel.Dispose();
+
+        var packedImage = (PackedImage?)GetPrivateField(viewModel, "_packedImage");
+
+        Assert.Null(viewModel.PreviewBitmap);
+        Assert.Null(packedImage);
+        Assert.Throws<ObjectDisposedException>(() => source.Pixels.Clone());
+    }
+
     private static TestSourceScope CreateSourceImage(
         Guid id,
         string fileName,
@@ -138,6 +197,8 @@ public sealed class MainWindowViewModelTests
 
     private sealed class TestSourceScope : IDisposable
     {
+        private bool _ownsPixels = true;
+
         public TestSourceScope(SourceImage source)
         {
             Source = source;
@@ -145,7 +206,15 @@ public sealed class MainWindowViewModelTests
 
         public SourceImage Source { get; }
 
-        public void Dispose() => Source.Pixels.Dispose();
+        public void Detach() => _ownsPixels = false;
+
+        public void Dispose()
+        {
+            if (_ownsPixels)
+            {
+                Source.Pixels.Dispose();
+            }
+        }
     }
 
     private static void SetPrivateField(object instance, string fieldName, object? value)
@@ -153,6 +222,13 @@ public sealed class MainWindowViewModelTests
         var field = instance.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
         Assert.NotNull(field);
         field!.SetValue(instance, value);
+    }
+
+    private static object? GetPrivateField(object instance, string fieldName)
+    {
+        var field = instance.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
+        Assert.NotNull(field);
+        return field!.GetValue(instance);
     }
 
     private static object? InvokePrivateMethod(object instance, string methodName, params object?[] arguments)
