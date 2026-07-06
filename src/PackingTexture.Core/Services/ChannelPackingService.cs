@@ -116,6 +116,13 @@ public static class ChannelPackingService
             throw new InvalidOperationException(
                 $"Output channel {mapping.OutputChannel} references missing source image {mapping.SourceImageId.Value}.");
         }
+
+        var source = sourceLookup[mapping.SourceImageId.Value];
+        if (!source.AvailableChannels.Contains(mapping.SourceChannel.Value))
+        {
+            throw new InvalidOperationException(
+                $"Output channel {mapping.OutputChannel} maps source image {mapping.SourceImageId.Value} channel {mapping.SourceChannel.Value}, but that channel is not available on the source image.");
+        }
     }
 
     private static byte ResolveByte(ChannelMapping mapping, DisposableImageLookup images, int x, int y)
@@ -154,17 +161,25 @@ public static class ChannelPackingService
 
         public DisposableImageLookup(IReadOnlyList<SourceImage> sources, int width, int height)
         {
-            foreach (var source in sources)
+            try
             {
-                if (source.Width == width && source.Height == height)
+                foreach (var source in sources)
                 {
-                    _images[source.Id] = source.Pixels;
-                    continue;
-                }
+                    if (source.Width == width && source.Height == height)
+                    {
+                        _images[source.Id] = source.Pixels;
+                        continue;
+                    }
 
-                var clone = source.Pixels.Clone(ctx => ctx.Resize(width, height));
-                _owned.Add(clone);
-                _images[source.Id] = clone;
+                    var clone = source.Pixels.Clone(ctx => ctx.Resize(width, height));
+                    _owned.Add(clone);
+                    _images[source.Id] = clone;
+                }
+            }
+            catch
+            {
+                Dispose();
+                throw;
             }
         }
 

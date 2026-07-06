@@ -142,4 +142,25 @@ public sealed class ChannelPackingServiceTests
 
         Assert.Contains(missingSourceId.ToString(), exception.Message);
     }
+
+    [Fact]
+    public void Pack_ThrowsWhenManualMappingTargetsUnavailableSourceChannel()
+    {
+        var sourceId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+        using var image = new Image<Rgba32>(1, 1);
+        var source = new SourceImage(sourceId, "RedOnly.png", 1, 1, SourceChannelSet.Red, image);
+        var mappings = new[]
+        {
+            ChannelMapping.ForSource(ChannelId.R, sourceId, ChannelId.G, isAutomatic: false),
+            ChannelMapping.ForConstant(ChannelId.G, ChannelSourceKind.Zero),
+            ChannelMapping.ForConstant(ChannelId.B, ChannelSourceKind.Zero),
+            ChannelMapping.ForConstant(ChannelId.A, ChannelSourceKind.One)
+        };
+
+        var exception = Assert.Throws<InvalidOperationException>(
+            () => ChannelPackingService.Pack([source], mappings, flipGreen: false));
+
+        Assert.Contains("not available", exception.Message);
+        Assert.Contains(ChannelId.G.ToString(), exception.Message);
+    }
 }
