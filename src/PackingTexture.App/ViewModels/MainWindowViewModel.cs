@@ -195,10 +195,25 @@ public sealed partial class ChannelMappingViewModel : ObservableObject
 
 public sealed partial class MainWindowViewModel : ObservableObject
 {
+    private readonly Func<string, CancellationToken, Task<SourceImage>> _importAsync;
+    private readonly Func<PackedImage, string, ExportSettings, CancellationToken, Task> _exportAsync;
     private readonly List<SourceImage> _sources = [];
     private Guid? _primarySourceId;
     private PackedImage? _packedImage;
     private AvaloniaBitmap? _previewBitmap;
+
+    public MainWindowViewModel()
+        : this(ImageImportService.ImportAsync, TextureExportService.ExportAsync)
+    {
+    }
+
+    public MainWindowViewModel(
+        Func<string, CancellationToken, Task<SourceImage>> importAsync,
+        Func<PackedImage, string, ExportSettings, CancellationToken, Task> exportAsync)
+    {
+        _importAsync = importAsync ?? throw new ArgumentNullException(nameof(importAsync));
+        _exportAsync = exportAsync ?? throw new ArgumentNullException(nameof(exportAsync));
+    }
 
     public AvaloniaBitmap? PreviewBitmap
     {
@@ -249,15 +264,36 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
     public async Task AddImagesAsync(IReadOnlyList<string> paths, CancellationToken cancellationToken = default)
     {
+        var failures = new List<string>();
+
         foreach (var path in paths)
         {
-            var source = await ImageImportService.ImportAsync(path, cancellationToken);
-            _primarySourceId ??= source.Id;
-            _sources.Add(source);
-            SourceImages.Add(new SourceImageViewModel(source));
+            try
+            {
+                var source = await _importAsync(path, cancellationToken);
+                _primarySourceId ??= source.Id;
+                _sources.Add(source);
+                SourceImages.Add(new SourceImageViewModel(source));
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                failures.Add($"{Path.GetFileName(path)} ({ex.Message})");
+            }
         }
 
-        ApplyAutomaticMappings();
+        if (_sources.Count > 0)
+        {
+            ApplyAutomaticMappings();
+        }
+
+        if (failures.Count > 0)
+        {
+            StatusText = AppendStatus(StatusText, BuildFailureSummary("Failed to import", "file", failures));
+        }
     }
 
     [RelayCommand]
@@ -321,13 +357,20 @@ public sealed partial class MainWindowViewModel : ObservableObject
             return;
         }
 
-        await TextureExportService.ExportAsync(
-            _packedImage,
-            path,
-            new ExportSettings(SelectedExportFormat, GenerateMipMaps),
-            CancellationToken.None);
+        try
+        {
+            await _exportAsync(
+                _packedImage,
+                path,
+                new ExportSettings(SelectedExportFormat, GenerateMipMaps),
+                CancellationToken.None);
 
-        StatusText = $"Exported {Path.GetFileName(path)}";
+            StatusText = $"Exported {Path.GetFileName(path)}";
+        }
+        catch (Exception ex)
+        {
+            StatusText = $"Export failed: {ex.Message}";
+        }
     }
 
     private void RefreshPreview()
@@ -341,16 +384,36 @@ public sealed partial class MainWindowViewModel : ObservableObject
             return;
         }
 
-        _packedImage = ChannelPackingService.Pack(GetPackingSources(), Mappings.Select(m => m.Mapping).ToList(), FlipY);
+        try
+        {
+            _packedImage = ChannelPackingService.Pack(GetPackingSources(), Mappings.Select(m => m.Mapping).ToList(), FlipY);
+        }
+        catch (Exception ex)
+        {
+            _packedImage?.Dispose();
+            _packedImage = null;
+            PreviewBitmap = null;
+            StatusText = ex.Message;
+            return;
+        }
+
         StatusText = _packedImage.HadResizedSources
             ? "Some sources were resized to match the first image."
             : "Ready.";
 
-        using var previewImage = PreviewImageFactory.Create(_packedImage, PreviewMode);
-        using var stream = new MemoryStream();
-        previewImage.SaveAsPng(stream);
-        stream.Position = 0;
-        PreviewBitmap = new AvaloniaBitmap(stream);
+        try
+        {
+            using var previewImage = PreviewImageFactory.Create(_packedImage, PreviewMode);
+            using var stream = new MemoryStream();
+            previewImage.SaveAsPng(stream);
+            stream.Position = 0;
+            PreviewBitmap = new AvaloniaBitmap(stream);
+        }
+        catch (Exception ex)
+        {
+            PreviewBitmap = null;
+            StatusText = $"Preview failed: {ex.Message}";
+        }
     }
 
     private IReadOnlyList<SourceImage> GetPackingSources()
@@ -383,4 +446,21 @@ public sealed partial class MainWindowViewModel : ObservableObject
 
         return packingSources;
     }
+
+    private static string BuildFailureSummary(string action, string singularNoun, IReadOnlyList<string> failures)
+    {
+        var noun = failures.Count == 1 ? singularNoun : $"{singularNoun}s";
+        var summary = string.Join("; ", failures.Take(3));
+        if (failures.Count > 3)
+        {
+            summary = $"{summary}; +{failures.Count - 3} more";
+        }
+
+        return $"{action} {failures.Count} {noun}: {summary}";
+    }
+
+    private static string AppendStatus(string currentStatus, string nextStatus) =>
+        string.IsNullOrWhiteSpace(currentStatus)
+            ? nextStatus
+            : $"{currentStatus} {nextStatus}";
 }

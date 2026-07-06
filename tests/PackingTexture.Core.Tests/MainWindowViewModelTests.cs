@@ -69,6 +69,85 @@ public sealed class MainWindowViewModelTests
         Assert.Equal(["C:/tmp/one.png", "C:/tmp/three.JPEG"], result);
     }
 
+    [Fact]
+    public async Task AddImagesAsync_ContinuesPastFailedImports_AndReportsInlineStatus()
+    {
+        var goodSource = CreateSourceImage(
+            Guid.Parse("11111111-1111-1111-1111-111111111111"),
+            "good.png",
+            2,
+            2,
+            SourceChannelSet.Rgba,
+            new Rgba32(10, 20, 30, 255));
+        using var goodSourceScope = goodSource;
+        var viewModel = new MainWindowViewModel(
+            importAsync: (path, _) => path.EndsWith("bad.png", StringComparison.OrdinalIgnoreCase)
+                ? Task.FromException<SourceImage>(new InvalidOperationException("Unsupported image format."))
+                : Task.FromResult(goodSource.Source),
+            exportAsync: (_, _, _, _) => Task.CompletedTask);
+
+        await viewModel.AddImagesAsync(["C:/tmp/good.png", "C:/tmp/bad.png"]);
+
+        Assert.Single(viewModel.SourceImages);
+        Assert.Equal(4, viewModel.Mappings.Count);
+        Assert.Contains("Failed to import 1 file", viewModel.StatusText, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Unsupported image format", viewModel.StatusText, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ExportCommand_ReportsInlineStatus_WhenExporterFails()
+    {
+        var goodSource = CreateSourceImage(
+            Guid.Parse("22222222-2222-2222-2222-222222222222"),
+            "export.png",
+            2,
+            2,
+            SourceChannelSet.Rgba,
+            new Rgba32(40, 50, 60, 255));
+        using var goodSourceScope = goodSource;
+        var viewModel = new MainWindowViewModel(
+            importAsync: (_, _) => Task.FromResult(goodSource.Source),
+            exportAsync: (_, _, _, _) => Task.FromException(new InvalidOperationException("Disk full.")));
+
+        await viewModel.AddImagesAsync(["C:/tmp/export.png"]);
+        await viewModel.ExportCommand.ExecuteAsync("C:/tmp/output.png");
+
+        Assert.Contains("Export failed", viewModel.StatusText, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("Disk full", viewModel.StatusText, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static TestSourceScope CreateSourceImage(
+        Guid id,
+        string fileName,
+        int width,
+        int height,
+        SourceChannelSet channelSet,
+        Rgba32 color)
+    {
+        var pixels = new Image<Rgba32>(width, height);
+        for (var y = 0; y < height; y++)
+        {
+            for (var x = 0; x < width; x++)
+            {
+                pixels[x, y] = color;
+            }
+        }
+
+        return new TestSourceScope(new SourceImage(id, fileName, width, height, channelSet, pixels));
+    }
+
+    private sealed class TestSourceScope : IDisposable
+    {
+        public TestSourceScope(SourceImage source)
+        {
+            Source = source;
+        }
+
+        public SourceImage Source { get; }
+
+        public void Dispose() => Source.Pixels.Dispose();
+    }
+
     private static void SetPrivateField(object instance, string fieldName, object? value)
     {
         var field = instance.GetType().GetField(fieldName, BindingFlags.Instance | BindingFlags.NonPublic);
