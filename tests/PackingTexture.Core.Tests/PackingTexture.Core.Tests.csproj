@@ -23,6 +23,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\PackingTexture.Core\PackingTexture.Core.csproj" />
+    <ProjectReference Include="..\..\src\PackingTexture.App\PackingTexture.App.csproj" />
   </ItemGroup>
 
 </Project>

@@ -41,11 +41,18 @@ public sealed partial class SourceImageViewModel : ObservableObject
     public string ChannelSummary => Source.Channels.ToString();
 }
 
+public sealed record SourceSelectionOption(string DisplayName, ChannelSourceKind SourceKind, SourceImageViewModel? SourceImage)
+{
+    public bool IsSource => SourceImage is not null;
+}
+
 public sealed partial class ChannelMappingViewModel : ObservableObject
 {
     private readonly Action _refreshPreview;
+    private IReadOnlyList<SourceSelectionOption> _sourceOptions = [];
+    private SourceSelectionOption? _selectedSourceOption;
+    private ChannelId? _selectedSourceChannel;
 
-    [ObservableProperty]
     private ChannelMapping mapping;
 
     public ChannelMappingViewModel(ChannelMapping mapping, Action refreshPreview)
@@ -54,10 +61,133 @@ public sealed partial class ChannelMappingViewModel : ObservableObject
         _refreshPreview = refreshPreview;
     }
 
+    public ChannelMapping Mapping
+    {
+        get => mapping;
+        private set => SetProperty(ref mapping, value);
+    }
+
     public ChannelId OutputChannel => Mapping.OutputChannel;
 
-    partial void OnMappingChanged(ChannelMapping value)
+    public IReadOnlyList<SourceSelectionOption> SourceOptions => _sourceOptions;
+
+    public IReadOnlyList<ChannelId> AvailableSourceChannels =>
+        SelectedSourceOption?.SourceImage?.Source.AvailableChannels ?? [];
+
+    public SourceSelectionOption? SelectedSourceOption
     {
+        get => _selectedSourceOption;
+        set
+        {
+            if (!SetProperty(ref _selectedSourceOption, value))
+            {
+                return;
+            }
+
+            if (_selectedSourceOption?.SourceImage is null)
+            {
+                _selectedSourceChannel = null;
+                OnPropertyChanged(nameof(SelectedSourceChannel));
+            }
+            else if (_selectedSourceChannel is null ||
+                     !_selectedSourceOption.SourceImage.Source.AvailableChannels.Contains(_selectedSourceChannel.Value))
+            {
+                _selectedSourceChannel = _selectedSourceOption.SourceImage.Source.AvailableChannels.First();
+                OnPropertyChanged(nameof(SelectedSourceChannel));
+            }
+
+            OnPropertyChanged(nameof(AvailableSourceChannels));
+            RebuildMapping();
+        }
+    }
+
+    public ChannelId? SelectedSourceChannel
+    {
+        get => _selectedSourceChannel;
+        set
+        {
+            if (!SetProperty(ref _selectedSourceChannel, value))
+            {
+                return;
+            }
+
+            RebuildMapping();
+        }
+    }
+
+    public void AttachSourceImages(IReadOnlyList<SourceImageViewModel> sourceImages)
+    {
+        _sourceOptions = BuildSourceOptions(sourceImages);
+
+        _selectedSourceOption = ResolveSelectedSourceOption();
+        _selectedSourceChannel = ResolveSelectedSourceChannel();
+
+        OnPropertyChanged(nameof(SourceOptions));
+        OnPropertyChanged(nameof(SelectedSourceOption));
+        OnPropertyChanged(nameof(AvailableSourceChannels));
+        OnPropertyChanged(nameof(SelectedSourceChannel));
+    }
+
+    private IReadOnlyList<SourceSelectionOption> BuildSourceOptions(IReadOnlyList<SourceImageViewModel> sourceImages)
+    {
+        var options = new List<SourceSelectionOption>(sourceImages.Count + 2);
+        options.AddRange(sourceImages.Select(source => new SourceSelectionOption(source.FileName, ChannelSourceKind.SourceChannel, source)));
+        options.Add(new SourceSelectionOption("Zero", ChannelSourceKind.Zero, null));
+        options.Add(new SourceSelectionOption("One", ChannelSourceKind.One, null));
+        return options;
+    }
+
+    private SourceSelectionOption? ResolveSelectedSourceOption()
+    {
+        if (Mapping.SourceKind == ChannelSourceKind.SourceChannel && Mapping.SourceImageId is not null)
+        {
+            var match = _sourceOptions.FirstOrDefault(option => option.SourceImage?.Id == Mapping.SourceImageId.Value);
+            if (match is not null)
+            {
+                return match;
+            }
+        }
+
+        return _sourceOptions.FirstOrDefault(option => option.SourceKind == Mapping.SourceKind)
+            ?? _sourceOptions.FirstOrDefault();
+    }
+
+    private ChannelId? ResolveSelectedSourceChannel()
+    {
+        if (_selectedSourceOption?.SourceImage is null)
+        {
+            return null;
+        }
+
+        if (Mapping.SourceKind == ChannelSourceKind.SourceChannel &&
+            Mapping.SourceChannel is ChannelId channel &&
+            _selectedSourceOption.SourceImage.Source.AvailableChannels.Contains(channel))
+        {
+            return channel;
+        }
+
+        return _selectedSourceOption.SourceImage.Source.AvailableChannels.First();
+    }
+
+    private void RebuildMapping()
+    {
+        if (_selectedSourceOption?.SourceImage is null)
+        {
+            Mapping = ChannelMapping.ForConstant(OutputChannel, _selectedSourceOption?.SourceKind ?? ChannelSourceKind.Zero, isAutomatic: false);
+        }
+        else
+        {
+            var channel = _selectedSourceChannel ?? _selectedSourceOption.SourceImage.Source.AvailableChannels.First();
+            if (!_selectedSourceOption.SourceImage.Source.AvailableChannels.Contains(channel))
+            {
+                channel = _selectedSourceOption.SourceImage.Source.AvailableChannels.First();
+                _selectedSourceChannel = channel;
+                OnPropertyChanged(nameof(SelectedSourceChannel));
+            }
+
+            Mapping = ChannelMapping.ForSource(OutputChannel, _selectedSourceOption.SourceImage.Id, channel, isAutomatic: false);
+        }
+
         OnPropertyChanged(nameof(OutputChannel));
         _refreshPreview();
     }
@@ -116,9 +246,6 @@ public sealed partial class MainWindowViewModel : ObservableObject
         ExportFormat.DdsBc7
     ];
 
-    public IReadOnlyList<ChannelId> ChannelOptions { get; } =
-        Enum.GetValues<ChannelId>();
-
     public async Task AddImagesAsync(IReadOnlyList<string> paths, CancellationToken cancellationToken = default)
     {
         foreach (var path in paths)
@@ -136,7 +263,9 @@ public sealed partial class MainWindowViewModel : ObservableObject
         Mappings.Clear();
         foreach (var mapping in ChannelPackingService.CreateDefaultMappings(_sources))
         {
-            Mappings.Add(new ChannelMappingViewModel(mapping, RefreshPreview));
+            var viewModel = new ChannelMappingViewModel(mapping, RefreshPreview);
+            viewModel.AttachSourceImages(SourceImages.ToArray());
+            Mappings.Add(viewModel);
         }
 
         RefreshPreview();

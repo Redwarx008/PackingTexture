@@ -47,23 +47,23 @@
 
           <ItemsControl ItemsSource="{Binding Mappings}">
             <ItemsControl.ItemTemplate>
-              <DataTemplate>
+              <DataTemplate x:DataType="vm:ChannelMappingViewModel">
                 <Grid ColumnDefinitions="42,*,110" Margin="0,4" ColumnSpacing="8" x:CompileBindings="False">
                   <TextBlock Text="{Binding OutputChannel}" FontWeight="Bold" FontSize="20" HorizontalAlignment="Center" VerticalAlignment="Center" />
                   <ComboBox Grid.Column="1"
-                            ItemsSource="{Binding DataContext.SourceImages, RelativeSource={RelativeSource AncestorType=Window}}"
-                            SelectedValue="{Binding Mapping.SourceImageId}"
-                            SelectedValueBinding="{Binding Id}"
+                            ItemsSource="{Binding SourceOptions}"
+                            SelectedItem="{Binding SelectedSourceOption}"
                             HorizontalAlignment="Stretch">
                     <ComboBox.ItemTemplate>
-                      <DataTemplate x:DataType="vm:SourceImageViewModel">
-                        <TextBlock Text="{Binding FileName}" />
+                      <DataTemplate>
+                        <TextBlock Text="{Binding DisplayName}" />
                       </DataTemplate>
                     </ComboBox.ItemTemplate>
                   </ComboBox>
                   <ComboBox Grid.Column="2"
-                            ItemsSource="{Binding DataContext.ChannelOptions, RelativeSource={RelativeSource AncestorType=Window}}"
-                            SelectedItem="{Binding Mapping.SourceChannel}"
+                            ItemsSource="{Binding AvailableSourceChannels}"
+                            SelectedItem="{Binding SelectedSourceChannel}"
+                            IsEnabled="{Binding SelectedSourceOption.IsSource}"
                             HorizontalAlignment="Stretch">
                   </ComboBox>
                 </Grid>
