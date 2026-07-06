@@ -121,4 +121,25 @@ public sealed class ChannelPackingServiceTests
         Assert.Equal(2, packed.Height);
         Assert.Equal((byte)99, packed.Pixels[1, 1].G);
     }
+
+    [Fact]
+    public void Pack_ThrowsWhenMappingReferencesMissingSource()
+    {
+        var sourceId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+        var missingSourceId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+        using var image = new Image<Rgba32>(1, 1);
+        var source = new SourceImage(sourceId, "Source.png", 1, 1, SourceChannelSet.Rgba, image);
+        var mappings = new[]
+        {
+            ChannelMapping.ForSource(ChannelId.R, missingSourceId, ChannelId.R),
+            ChannelMapping.ForConstant(ChannelId.G, ChannelSourceKind.Zero),
+            ChannelMapping.ForConstant(ChannelId.B, ChannelSourceKind.Zero),
+            ChannelMapping.ForConstant(ChannelId.A, ChannelSourceKind.One)
+        };
+
+        var exception = Assert.Throws<InvalidOperationException>(
+            () => ChannelPackingService.Pack([source], mappings, flipGreen: false));
+
+        Assert.Contains(missingSourceId.ToString(), exception.Message);
+    }
 }

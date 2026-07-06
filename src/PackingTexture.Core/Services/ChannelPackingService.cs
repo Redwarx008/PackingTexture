@@ -52,36 +52,71 @@ public static class ChannelPackingService
         var width = sources[0].Width;
         var height = sources[0].Height;
         var hadResizedSources = sources.Any(source => source.Width != width || source.Height != height);
+        var sourceLookup = sources.ToDictionary(source => source.Id);
         var redMapping = GetRequiredMapping(mappings, ChannelId.R);
         var greenMapping = GetRequiredMapping(mappings, ChannelId.G);
         var blueMapping = GetRequiredMapping(mappings, ChannelId.B);
         var alphaMapping = GetRequiredMapping(mappings, ChannelId.A);
+        ValidateMapping(redMapping, sourceLookup);
+        ValidateMapping(greenMapping, sourceLookup);
+        ValidateMapping(blueMapping, sourceLookup);
+        ValidateMapping(alphaMapping, sourceLookup);
+
         using var resizedSources = new DisposableImageLookup(sources, width, height);
-        var output = new Image<Rgba32>(width, height);
+        Image<Rgba32>? output = null;
 
-        for (var y = 0; y < height; y++)
+        try
         {
-            for (var x = 0; x < width; x++)
+            output = new Image<Rgba32>(width, height);
+
+            for (var y = 0; y < height; y++)
             {
-                var r = ResolveByte(redMapping, resizedSources, x, y);
-                var g = ResolveByte(greenMapping, resizedSources, x, y);
-                var b = ResolveByte(blueMapping, resizedSources, x, y);
-                var a = ResolveByte(alphaMapping, resizedSources, x, y);
-
-                if (flipGreen)
+                for (var x = 0; x < width; x++)
                 {
-                    g = (byte)(255 - g);
+                    var r = ResolveByte(redMapping, resizedSources, x, y);
+                    var g = ResolveByte(greenMapping, resizedSources, x, y);
+                    var b = ResolveByte(blueMapping, resizedSources, x, y);
+                    var a = ResolveByte(alphaMapping, resizedSources, x, y);
+
+                    if (flipGreen)
+                    {
+                        g = (byte)(255 - g);
+                    }
+
+                    output[x, y] = new Rgba32(r, g, b, a);
                 }
-
-                output[x, y] = new Rgba32(r, g, b, a);
             }
-        }
 
-        return new PackedImage(output, hadResizedSources);
+            return new PackedImage(output, hadResizedSources);
+        }
+        catch
+        {
+            output?.Dispose();
+            throw;
+        }
     }
 
     private static ChannelMapping GetRequiredMapping(IReadOnlyList<ChannelMapping> mappings, ChannelId outputChannel) =>
         mappings.Single(mapping => mapping.OutputChannel == outputChannel);
+
+    private static void ValidateMapping(ChannelMapping mapping, IReadOnlyDictionary<Guid, SourceImage> sourceLookup)
+    {
+        if (mapping.SourceKind != ChannelSourceKind.SourceChannel)
+        {
+            return;
+        }
+
+        if (mapping.SourceImageId is null || mapping.SourceChannel is null)
+        {
+            throw new InvalidOperationException($"Output channel {mapping.OutputChannel} has no source.");
+        }
+
+        if (!sourceLookup.ContainsKey(mapping.SourceImageId.Value))
+        {
+            throw new InvalidOperationException(
+                $"Output channel {mapping.OutputChannel} references missing source image {mapping.SourceImageId.Value}.");
+        }
+    }
 
     private static byte ResolveByte(ChannelMapping mapping, DisposableImageLookup images, int x, int y)
     {
