@@ -196,6 +196,7 @@ public sealed partial class ChannelMappingViewModel : ObservableObject
 public sealed partial class MainWindowViewModel : ObservableObject
 {
     private readonly List<SourceImage> _sources = [];
+    private Guid? _primarySourceId;
     private PackedImage? _packedImage;
     private AvaloniaBitmap? _previewBitmap;
 
@@ -251,6 +252,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
         foreach (var path in paths)
         {
             var source = await ImageImportService.ImportAsync(path, cancellationToken);
+            _primarySourceId ??= source.Id;
             _sources.Add(source);
             SourceImages.Add(new SourceImageViewModel(source));
         }
@@ -339,7 +341,7 @@ public sealed partial class MainWindowViewModel : ObservableObject
             return;
         }
 
-        _packedImage = ChannelPackingService.Pack(_sources, Mappings.Select(m => m.Mapping).ToList(), FlipY);
+        _packedImage = ChannelPackingService.Pack(GetPackingSources(), Mappings.Select(m => m.Mapping).ToList(), FlipY);
         StatusText = _packedImage.HadResizedSources
             ? "Some sources were resized to match the first image."
             : "Ready.";
@@ -349,5 +351,36 @@ public sealed partial class MainWindowViewModel : ObservableObject
         previewImage.SaveAsPng(stream);
         stream.Position = 0;
         PreviewBitmap = new AvaloniaBitmap(stream);
+    }
+
+    private IReadOnlyList<SourceImage> GetPackingSources()
+    {
+        if (_primarySourceId is null)
+        {
+            return _sources;
+        }
+
+        var primaryIndex = _sources.FindIndex(source => source.Id == _primarySourceId.Value);
+        if (primaryIndex <= 0)
+        {
+            return _sources;
+        }
+
+        var packingSources = new List<SourceImage>(_sources.Count)
+        {
+            _sources[primaryIndex]
+        };
+
+        for (var index = 0; index < _sources.Count; index++)
+        {
+            if (index == primaryIndex)
+            {
+                continue;
+            }
+
+            packingSources.Add(_sources[index]);
+        }
+
+        return packingSources;
     }
 }

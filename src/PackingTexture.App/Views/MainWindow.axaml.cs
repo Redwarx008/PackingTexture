@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
+using System.IO;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
@@ -11,6 +13,15 @@ namespace PackingTexture.App.Views;
 
 public partial class MainWindow : Window
 {
+    private static readonly HashSet<string> SupportedImportExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".png",
+        ".jpg",
+        ".jpeg",
+        ".bmp",
+        ".tga"
+    };
+
     public MainWindow()
     {
         InitializeComponent();
@@ -95,16 +106,27 @@ public partial class MainWindow : Window
             return;
         }
 
-        var files = e.DataTransfer.TryGetFiles()?
+        var files = FilterSupportedImportPaths(e.DataTransfer.TryGetFiles()?
             .Select(file => file.TryGetLocalPath())
             .Where(path => !string.IsNullOrWhiteSpace(path))
             .Select(path => path!)
-            .ToArray();
+            .ToArray());
 
         if (files is { Length: > 0 })
         {
             await viewModel.AddImagesAsync(files);
         }
+    }
+
+    private static string[] FilterSupportedImportPaths(IEnumerable<string>? paths) =>
+        paths is null
+            ? []
+            : paths.Where(IsSupportedImportPath).ToArray();
+
+    private static bool IsSupportedImportPath(string path)
+    {
+        var extension = Path.GetExtension(path);
+        return !string.IsNullOrWhiteSpace(extension) && SupportedImportExtensions.Contains(extension);
     }
 
     private void PreviewMode_OnChecked(object? sender, RoutedEventArgs e)
