@@ -43,12 +43,15 @@ public sealed partial class SourceImageViewModel : ObservableObject
 
 public sealed partial class ChannelMappingViewModel : ObservableObject
 {
+    private readonly Action _refreshPreview;
+
     [ObservableProperty]
     private ChannelMapping mapping;
 
-    public ChannelMappingViewModel(ChannelMapping mapping)
+    public ChannelMappingViewModel(ChannelMapping mapping, Action refreshPreview)
     {
         this.mapping = mapping;
+        _refreshPreview = refreshPreview;
     }
 
     public ChannelId OutputChannel => Mapping.OutputChannel;
@@ -56,6 +59,7 @@ public sealed partial class ChannelMappingViewModel : ObservableObject
     partial void OnMappingChanged(ChannelMapping value)
     {
         OnPropertyChanged(nameof(OutputChannel));
+        _refreshPreview();
     }
 }
 
@@ -63,9 +67,25 @@ public sealed partial class MainWindowViewModel : ObservableObject
 {
     private readonly List<SourceImage> _sources = [];
     private PackedImage? _packedImage;
+    private AvaloniaBitmap? _previewBitmap;
 
-    [ObservableProperty]
-    private AvaloniaBitmap? previewBitmap;
+    public AvaloniaBitmap? PreviewBitmap
+    {
+        get => _previewBitmap;
+        private set
+        {
+            if (ReferenceEquals(_previewBitmap, value))
+            {
+                return;
+            }
+
+            var previous = _previewBitmap;
+            if (SetProperty(ref _previewBitmap, value))
+            {
+                previous?.Dispose();
+            }
+        }
+    }
 
     [ObservableProperty]
     private PreviewMode previewMode;
@@ -106,7 +126,6 @@ public sealed partial class MainWindowViewModel : ObservableObject
         }
 
         ApplyAutomaticMappings();
-        RefreshPreview();
     }
 
     public void ApplyAutomaticMappings()
@@ -114,8 +133,10 @@ public sealed partial class MainWindowViewModel : ObservableObject
         Mappings.Clear();
         foreach (var mapping in ChannelPackingService.CreateDefaultMappings(_sources))
         {
-            Mappings.Add(new ChannelMappingViewModel(mapping));
+            Mappings.Add(new ChannelMappingViewModel(mapping, RefreshPreview));
         }
+
+        RefreshPreview();
     }
 
     partial void OnFlipYChanged(bool value) => RefreshPreview();
