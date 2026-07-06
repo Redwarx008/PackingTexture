@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using PackingTexture.App.ViewModels;
@@ -34,8 +35,6 @@ public partial class MainWindow : Window
                     Patterns =
                     [
                         "*.png",
-                        "*.jpg",
-                        "*.jpeg",
                         "*.bmp",
                         "*.tga"
                     ]
@@ -84,6 +83,25 @@ public partial class MainWindow : Window
         if (!string.IsNullOrWhiteSpace(path) && viewModel.ExportCommand.CanExecute(path))
         {
             await viewModel.ExportCommand.ExecuteAsync(path);
+        }
+    }
+
+    private async void Window_OnDrop(object? sender, DragEventArgs e)
+    {
+        if (DataContext is not MainWindowViewModel viewModel)
+        {
+            return;
+        }
+
+        var files = e.DataTransfer.TryGetFiles()?
+            .Select(file => file.TryGetLocalPath())
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Select(path => path!)
+            .ToArray();
+
+        if (files is { Length: > 0 })
+        {
+            await viewModel.AddImagesAsync(files);
         }
     }
 

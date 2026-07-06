@@ -3,6 +3,8 @@
         xmlns:vm="using:PackingTexture.App.ViewModels"
         x:Class="PackingTexture.App.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
+        DragDrop.AllowDrop="True"
+        DragDrop.Drop="Window_OnDrop"
         Title="PackingTexture"
         Width="1180"
         Height="720"
@@ -21,19 +23,22 @@
         </Grid>
 
         <Border DockPanel.Dock="Top" Margin="12,0,12,12" Padding="12" BorderBrush="#BFDBFE" BorderThickness="1" Background="#EFF6FF" CornerRadius="6">
-          <TextBlock Text="Drag PNG / TGA / BMP / JPG source images here" HorizontalAlignment="Center" Foreground="#475569" />
+          <TextBlock Text="Drag PNG / TGA / BMP source images here" HorizontalAlignment="Center" Foreground="#475569" />
         </Border>
 
         <ListBox DockPanel.Dock="Top" ItemsSource="{Binding SourceImages}" Height="170" Margin="12,0,12,12">
           <ListBox.ItemTemplate>
             <DataTemplate x:DataType="vm:SourceImageViewModel">
-              <Grid ColumnDefinitions="*,Auto" Margin="4">
+              <Grid ColumnDefinitions="*,Auto" Margin="4" ColumnSpacing="8" x:CompileBindings="False">
                 <StackPanel>
                   <TextBlock Text="{Binding FileName}" FontWeight="SemiBold" />
                   <TextBlock Text="{Binding Dimensions}" Foreground="#64748B" FontSize="12" />
                   <TextBlock Text="{Binding ChannelSummary}" Foreground="#64748B" FontSize="12" />
                 </StackPanel>
-                <TextBlock Grid.Column="1" Text="&#x2261;" Foreground="#64748B" VerticalAlignment="Center" />
+                <StackPanel Grid.Column="1" Orientation="Vertical" Spacing="4">
+                  <Button Content="Up" Command="{Binding $parent[Window].DataContext.MoveSourceUpCommand}" CommandParameter="{Binding}" />
+                  <Button Content="Down" Command="{Binding $parent[Window].DataContext.MoveSourceDownCommand}" CommandParameter="{Binding}" />
+                </StackPanel>
               </Grid>
             </DataTemplate>
           </ListBox.ItemTemplate>

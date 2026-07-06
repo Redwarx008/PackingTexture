@@ -258,6 +258,40 @@ public sealed partial class MainWindowViewModel : ObservableObject
         ApplyAutomaticMappings();
     }
 
+    [RelayCommand]
+    private void MoveSourceUp(SourceImageViewModel source)
+    {
+        var index = SourceImages.IndexOf(source);
+        if (index <= 0)
+        {
+            return;
+        }
+
+        SourceImages.Move(index, index - 1);
+        var core = _sources[index];
+        _sources.RemoveAt(index);
+        _sources.Insert(index - 1, core);
+        ApplyAutomaticMappings();
+        RefreshPreview();
+    }
+
+    [RelayCommand]
+    private void MoveSourceDown(SourceImageViewModel source)
+    {
+        var index = SourceImages.IndexOf(source);
+        if (index < 0 || index >= SourceImages.Count - 1)
+        {
+            return;
+        }
+
+        SourceImages.Move(index, index + 1);
+        var core = _sources[index];
+        _sources.RemoveAt(index);
+        _sources.Insert(index + 1, core);
+        ApplyAutomaticMappings();
+        RefreshPreview();
+    }
+
     public void ApplyAutomaticMappings()
     {
         Mappings.Clear();
