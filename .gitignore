@@ -6,3 +6,8 @@ obj/
 .vs/
 *.user
 *.suo
+
+# Visual Studio Code / Rider / OS noise
+.vscode/
+.idea/
+.DS_Store
