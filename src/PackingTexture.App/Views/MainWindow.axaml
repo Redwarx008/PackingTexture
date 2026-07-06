@@ -23,7 +23,7 @@
         </Grid>
 
         <Border DockPanel.Dock="Top" Margin="12,0,12,12" Padding="12" BorderBrush="#BFDBFE" BorderThickness="1" Background="#EFF6FF" CornerRadius="6">
-          <TextBlock Text="Drag PNG / TGA / BMP source images here" HorizontalAlignment="Center" Foreground="#475569" />
+          <TextBlock Text="Drag PNG / JPG / JPEG / TGA / BMP source images here" HorizontalAlignment="Center" Foreground="#475569" />
         </Border>
 
         <ListBox DockPanel.Dock="Top" ItemsSource="{Binding SourceImages}" Height="170" Margin="12,0,12,12">

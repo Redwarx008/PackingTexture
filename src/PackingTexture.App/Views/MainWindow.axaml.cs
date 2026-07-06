@@ -35,6 +35,8 @@ public partial class MainWindow : Window
                     Patterns =
                     [
                         "*.png",
+                        "*.jpg",
+                        "*.jpeg",
                         "*.bmp",
                         "*.tga"
                     ]

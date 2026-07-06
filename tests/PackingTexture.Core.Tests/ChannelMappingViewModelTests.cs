@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Reflection;
 using PackingTexture.App.ViewModels;
 using PackingTexture.Core.Models;
+using PackingTexture.Core.Services;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
 
@@ -66,6 +67,47 @@ public sealed class ChannelMappingViewModelTests
         Assert.Equal(ChannelId.B, rebuiltMapping.SourceChannel);
         Assert.Equal(ChannelSourceKind.SourceChannel, rebuiltMapping.SourceKind);
         Assert.True(refreshCount > 0);
+    }
+
+    [Fact]
+    public void RebuildMappingsForSourceOrder_PreservesManualMappings_AndRecomputesAutomaticMappings()
+    {
+        var firstId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
+        var secondId = Guid.Parse("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb");
+        using var first = new Image<Rgba32>(1, 1);
+        using var second = new Image<Rgba32>(1, 1);
+
+        var sources = new[]
+        {
+            new SourceImage(secondId, "Second.png", 1, 1, SourceChannelSet.Gray, second.Clone()),
+            new SourceImage(firstId, "First.png", 1, 1, SourceChannelSet.Red, first.Clone())
+        };
+        var existingMappings = new[]
+        {
+            ChannelMapping.ForSource(ChannelId.R, firstId, ChannelId.R),
+            ChannelMapping.ForConstant(ChannelId.G, ChannelSourceKind.Zero, isAutomatic: false),
+            ChannelMapping.ForConstant(ChannelId.B, ChannelSourceKind.Zero),
+            ChannelMapping.ForConstant(ChannelId.A, ChannelSourceKind.One)
+        };
+
+        var method = typeof(ChannelPackingService).GetMethod(
+            "RebuildMappingsForSourceOrder",
+            BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Static);
+
+        Assert.NotNull(method);
+
+        var rebuilt = (IReadOnlyList<ChannelMapping>)method!.Invoke(null, [sources, existingMappings])!;
+
+        var red = rebuilt.Single(mapping => mapping.OutputChannel == ChannelId.R);
+        var green = rebuilt.Single(mapping => mapping.OutputChannel == ChannelId.G);
+
+        Assert.Equal(secondId, red.SourceImageId);
+        Assert.Equal(ChannelId.Gray, red.SourceChannel);
+        Assert.True(red.IsAutomatic);
+        Assert.Equal(ChannelSourceKind.Zero, green.SourceKind);
+        Assert.Null(green.SourceImageId);
+        Assert.Null(green.SourceChannel);
+        Assert.False(green.IsAutomatic);
     }
 
     private static SourceImageViewModel CreateSourceImageViewModel(Guid id, string fileName, SourceChannelSet channels)

@@ -272,7 +272,6 @@ public sealed partial class MainWindowViewModel : ObservableObject
         _sources.RemoveAt(index);
         _sources.Insert(index - 1, core);
         ApplyAutomaticMappings();
-        RefreshPreview();
     }
 
     [RelayCommand]
@@ -289,16 +288,18 @@ public sealed partial class MainWindowViewModel : ObservableObject
         _sources.RemoveAt(index);
         _sources.Insert(index + 1, core);
         ApplyAutomaticMappings();
-        RefreshPreview();
     }
 
     public void ApplyAutomaticMappings()
     {
+        var sourceImages = SourceImages.ToArray();
+        var mappings = ChannelPackingService.RebuildMappingsForSourceOrder(_sources, Mappings.Select(m => m.Mapping).ToArray());
+
         Mappings.Clear();
-        foreach (var mapping in ChannelPackingService.CreateDefaultMappings(_sources))
+        foreach (var mapping in mappings)
         {
             var viewModel = new ChannelMappingViewModel(mapping, RefreshPreview);
-            viewModel.AttachSourceImages(SourceImages.ToArray());
+            viewModel.AttachSourceImages(sourceImages);
             Mappings.Add(viewModel);
         }
 

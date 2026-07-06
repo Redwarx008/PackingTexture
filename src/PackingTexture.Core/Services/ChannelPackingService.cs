@@ -34,6 +34,32 @@ public static class ChannelPackingService
         return result;
     }
 
+    public static IReadOnlyList<ChannelMapping> RebuildMappingsForSourceOrder(
+        IReadOnlyList<SourceImage> sources,
+        IReadOnlyList<ChannelMapping> existingMappings)
+    {
+        var defaultMappings = CreateDefaultMappings(sources).ToDictionary(mapping => mapping.OutputChannel);
+        var manualMappings = existingMappings
+            .Where(mapping => !mapping.IsAutomatic)
+            .ToDictionary(mapping => mapping.OutputChannel);
+        var sourceLookup = sources.ToDictionary(source => source.Id);
+
+        var result = new List<ChannelMapping>(OutputOrder.Length);
+        foreach (var outputChannel in OutputOrder)
+        {
+            if (manualMappings.TryGetValue(outputChannel, out var manualMapping) &&
+                IsValidManualMapping(manualMapping, sourceLookup))
+            {
+                result.Add(manualMapping);
+                continue;
+            }
+
+            result.Add(defaultMappings[outputChannel]);
+        }
+
+        return result;
+    }
+
     public static PackedImage Pack(
         IReadOnlyList<SourceImage> sources,
         IReadOnlyList<ChannelMapping> mappings,
@@ -123,6 +149,28 @@ public static class ChannelPackingService
             throw new InvalidOperationException(
                 $"Output channel {mapping.OutputChannel} maps source image {mapping.SourceImageId.Value} channel {mapping.SourceChannel.Value}, but that channel is not available on the source image.");
         }
+    }
+
+    private static bool IsValidManualMapping(
+        ChannelMapping mapping,
+        IReadOnlyDictionary<Guid, SourceImage> sourceLookup)
+    {
+        if (mapping.SourceKind != ChannelSourceKind.SourceChannel)
+        {
+            return true;
+        }
+
+        if (mapping.SourceImageId is null || mapping.SourceChannel is null)
+        {
+            return false;
+        }
+
+        if (!sourceLookup.TryGetValue(mapping.SourceImageId.Value, out var source))
+        {
+            return false;
+        }
+
+        return source.AvailableChannels.Contains(mapping.SourceChannel.Value);
     }
 
     private static byte ResolveByte(ChannelMapping mapping, DisposableImageLookup images, int x, int y)
