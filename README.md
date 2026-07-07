@@ -2,6 +2,8 @@
 
 PackingTexture 是一个基于 Avalonia 和 .NET 的贴图通道打包工具，用来把多张图片的通道组合到一张贴图里。它既可以作为桌面 GUI 使用，也可以作为命令行批处理工具使用。
 
+![PackingTexture GUI](docs/images/packingtexture-gui.png)
+
 典型用途：把一张 Mask 贴图里的 RGB 数据和另一张高度/Alpha 贴图里的灰度数据，打包成一张 PNG 或 DDS 贴图。
 
 ## 功能
