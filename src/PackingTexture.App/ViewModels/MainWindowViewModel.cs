@@ -5,12 +5,14 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Avalonia.Media;
 using AvaloniaBitmap = Avalonia.Media.Imaging.Bitmap;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using PackingTexture.Core.Models;
 using PackingTexture.Core.Services;
 using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Processing;
 
 namespace PackingTexture.App.ViewModels;
 
@@ -23,14 +25,17 @@ public enum PreviewMode
     A
 }
 
-public sealed partial class SourceImageViewModel : ObservableObject
+public sealed partial class SourceImageViewModel : ObservableObject, IDisposable
 {
     public SourceImageViewModel(SourceImage source)
     {
         Source = source;
+        ThumbnailBitmap = TryCreateThumbnail(source);
     }
 
     public SourceImage Source { get; }
+
+    public AvaloniaBitmap? ThumbnailBitmap { get; }
 
     public Guid Id => Source.Id;
 
@@ -38,7 +43,42 @@ public sealed partial class SourceImageViewModel : ObservableObject
 
     public string Dimensions => $"{Source.Width} x {Source.Height}";
 
-    public string ChannelSummary => Source.Channels.ToString();
+    public string SourceSummary => $"{Dimensions} - {ChannelSummary}";
+
+    public string ChannelSummary => Source.Channels switch
+    {
+        SourceChannelSet.Gray => "Gray",
+        SourceChannelSet.Rgb => "RGB",
+        SourceChannelSet.Rgba => "RGBA",
+        _ => Source.Channels.ToString()
+    };
+
+    private static AvaloniaBitmap? TryCreateThumbnail(SourceImage source)
+    {
+        try
+        {
+            using var thumbnail = source.Pixels.Clone(context => context.Resize(new ResizeOptions
+            {
+                Mode = ResizeMode.Crop,
+                Size = new Size(72, 72)
+            }));
+            using var stream = new MemoryStream();
+            thumbnail.SaveAsPng(stream);
+            stream.Position = 0;
+            return new AvaloniaBitmap(stream);
+        }
+        catch (InvalidOperationException)
+        {
+            return null;
+        }
+    }
+
+    public void Dispose() => ThumbnailBitmap?.Dispose();
+}
+
+public sealed record ExportFormatOption(ExportFormat Format, string DisplayName)
+{
+    public override string ToString() => DisplayName;
 }
 
 public sealed record SourceSelectionOption(string DisplayName, ChannelSourceKind SourceKind, SourceImageViewModel? SourceImage)
@@ -68,6 +108,15 @@ public sealed partial class ChannelMappingViewModel : ObservableObject
     }
 
     public ChannelId OutputChannel => Mapping.OutputChannel;
+
+    public IBrush OutputChannelBrush => OutputChannel switch
+    {
+        ChannelId.R => Brushes.Firebrick,
+        ChannelId.G => Brushes.ForestGreen,
+        ChannelId.B => Brushes.RoyalBlue,
+        ChannelId.A => Brushes.SlateGray,
+        _ => Brushes.Black
+    };
 
     public IReadOnlyList<SourceSelectionOption> SourceOptions => _sourceOptions;
 
@@ -249,19 +298,44 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private string statusText = "Add images to begin.";
 
+    [ObservableProperty]
+    private string outputSizeText = "Output: -";
+
     public ObservableCollection<SourceImageViewModel> SourceImages { get; } = [];
 
     public ObservableCollection<ChannelMappingViewModel> Mappings { get; } = [];
 
-    public IReadOnlyList<ExportFormat> ExportFormats { get; } =
+    public AvaloniaBitmap? CheckerboardBitmap { get; } = TryCreateCheckerboardBitmap();
+
+    public IReadOnlyList<ExportFormatOption> ExportFormatOptions { get; } =
     [
-        ExportFormat.Png,
-        ExportFormat.DdsBc1,
-        ExportFormat.DdsBc3,
-        ExportFormat.DdsBc4,
-        ExportFormat.DdsBc5,
-        ExportFormat.DdsBc7
+        new(ExportFormat.Png, "PNG"),
+        new(ExportFormat.DdsBc1, "DDS BC1"),
+        new(ExportFormat.DdsBc3, "DDS BC3"),
+        new(ExportFormat.DdsBc4, "DDS BC4"),
+        new(ExportFormat.DdsBc5, "DDS BC5"),
+        new(ExportFormat.DdsBc7, "DDS BC7")
     ];
+
+    public ExportFormatOption? SelectedExportFormatOption
+    {
+        get => ExportFormatOptions.First(option => option.Format == SelectedExportFormat);
+        set
+        {
+            if (value is null || value.Format == SelectedExportFormat)
+            {
+                return;
+            }
+
+            SelectedExportFormat = value.Format;
+            OnPropertyChanged();
+        }
+    }
+
+    public bool HasStatusMessage =>
+        !string.IsNullOrWhiteSpace(StatusText) &&
+        !StatusText.Equals("Ready.", StringComparison.OrdinalIgnoreCase) &&
+        !StatusText.Equals("Add images to begin.", StringComparison.OrdinalIgnoreCase);
 
     public async Task AddImagesAsync(IReadOnlyList<string> paths, CancellationToken cancellationToken = default)
     {
@@ -349,6 +423,13 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 
     partial void OnPreviewModeChanged(PreviewMode value) => RefreshPreview();
 
+    partial void OnSelectedExportFormatChanged(ExportFormat value) => OnPropertyChanged(nameof(SelectedExportFormatOption));
+
+    partial void OnStatusTextChanged(string value) => OnPropertyChanged(nameof(HasStatusMessage));
+
+    [RelayCommand]
+    private void SetPreviewMode(PreviewMode mode) => PreviewMode = mode;
+
     [RelayCommand]
     private async Task ExportAsync(string path)
     {
@@ -381,6 +462,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 
         if (_sources.Count == 0 || Mappings.Count != 4)
         {
+            OutputSizeText = "Output: -";
             PreviewBitmap = null;
             return;
         }
@@ -393,11 +475,13 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         {
             _packedImage?.Dispose();
             _packedImage = null;
+            OutputSizeText = "Output: -";
             PreviewBitmap = null;
             StatusText = ex.Message;
             return;
         }
 
+        OutputSizeText = $"Output: {_packedImage.Width} x {_packedImage.Height}";
         StatusText = _packedImage.HadResizedSources
             ? "Some sources were resized to match the first image."
             : "Ready.";
@@ -465,6 +549,33 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             ? nextStatus
             : $"{currentStatus} {nextStatus}";
 
+    private static AvaloniaBitmap? TryCreateCheckerboardBitmap()
+    {
+        try
+        {
+            using var image = new Image<SixLabors.ImageSharp.PixelFormats.Rgba32>(32, 32);
+            var light = new SixLabors.ImageSharp.PixelFormats.Rgba32(245, 248, 252, 255);
+            var dark = new SixLabors.ImageSharp.PixelFormats.Rgba32(225, 232, 242, 255);
+
+            for (var y = 0; y < image.Height; y++)
+            {
+                for (var x = 0; x < image.Width; x++)
+                {
+                    image[x, y] = ((x / 16) + (y / 16)) % 2 == 0 ? light : dark;
+                }
+            }
+
+            using var stream = new MemoryStream();
+            image.SaveAsPng(stream);
+            stream.Position = 0;
+            return new AvaloniaBitmap(stream);
+        }
+        catch (InvalidOperationException)
+        {
+            return null;
+        }
+    }
+
     public void Dispose()
     {
         if (_disposed)
@@ -478,6 +589,12 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         _packedImage = null;
 
         PreviewBitmap = null;
+        CheckerboardBitmap?.Dispose();
+
+        foreach (var sourceImage in SourceImages)
+        {
+            sourceImage.Dispose();
+        }
 
         foreach (var source in _sources)
         {

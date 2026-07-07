@@ -124,6 +124,35 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
+    public async Task AddImagesAsync_UpdatesOutputSizeText()
+    {
+        var goodSource = CreateSourceImage(
+            Guid.Parse("44444444-4444-4444-4444-444444444444"),
+            "size.png",
+            7,
+            9,
+            SourceChannelSet.Rgba,
+            new Rgba32(10, 20, 30, 255));
+        using var goodSourceScope = goodSource;
+        var viewModel = new MainWindowViewModel(
+            importAsync: (_, _) => Task.FromResult(goodSource.Source),
+            exportAsync: (_, _, _, _) => Task.CompletedTask);
+
+        await viewModel.AddImagesAsync(["C:/tmp/size.png"]);
+
+        Assert.Equal("Output: 7 x 9", viewModel.OutputSizeText);
+    }
+
+    [Fact]
+    public void ExportFormatOptions_UseReadableLabels()
+    {
+        var viewModel = new MainWindowViewModel();
+
+        Assert.Contains(viewModel.ExportFormatOptions, option => option.DisplayName == "DDS BC7");
+        Assert.Equal("DDS BC7", viewModel.SelectedExportFormatOption?.DisplayName);
+    }
+
+    [Fact]
     public async Task ExportCommand_ReportsInlineStatus_WhenExporterFails()
     {
         var goodSource = CreateSourceImage(

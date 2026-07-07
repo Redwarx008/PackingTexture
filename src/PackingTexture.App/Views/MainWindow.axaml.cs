@@ -220,19 +220,19 @@ public partial class MainWindow : Window
             ? nextStatus
             : $"{currentStatus} {nextStatus}";
 
-    private void PreviewMode_OnChecked(object? sender, RoutedEventArgs e)
+    private void PreviewMode_OnClick(object? sender, RoutedEventArgs e)
     {
-        if (sender is not RadioButton radioButton || radioButton.IsChecked != true || DataContext is not MainWindowViewModel viewModel)
+        if (sender is not Button button || DataContext is not MainWindowViewModel viewModel)
         {
             return;
         }
 
-        if (radioButton.Tag is null)
+        if (button.Tag is null)
         {
             return;
         }
 
-        if (Enum.TryParse<PreviewMode>(radioButton.Tag.ToString(), true, out var mode))
+        if (Enum.TryParse<PreviewMode>(button.Tag.ToString(), true, out var mode))
         {
             viewModel.PreviewMode = mode;
         }
