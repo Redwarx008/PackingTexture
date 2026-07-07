@@ -12,6 +12,7 @@ using CommunityToolkit.Mvvm.Input;
 using PackingTexture.Core.Models;
 using PackingTexture.Core.Services;
 using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
 
 namespace PackingTexture.App.ViewModels;
@@ -253,11 +254,13 @@ public sealed partial class ChannelMappingViewModel : ObservableObject
 
 public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 {
+    private const int PreviewMaxDimension = 1024;
+
     private readonly Func<string, CancellationToken, Task<SourceImage>> _importAsync;
     private readonly Func<PackedImage, string, ExportSettings, CancellationToken, Task> _exportAsync;
     private readonly List<SourceImage> _sources = [];
     private Guid? _primarySourceId;
-    private PackedImage? _packedImage;
+    private PackedImage? _previewPackedImage;
     private AvaloniaBitmap? _previewBitmap;
     private string? _suggestedExportDirectory;
     private bool _disposed;
@@ -463,7 +466,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 
     partial void OnFlipYChanged(bool value) => RefreshPreview();
 
-    partial void OnPreviewModeChanged(PreviewMode value) => RefreshPreview();
+    partial void OnPreviewModeChanged(PreviewMode value) => RenderPreviewBitmap();
 
     partial void OnSelectedExportFormatChanged(ExportFormat value)
     {
@@ -471,6 +474,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(SuggestedExportFileName));
         OnPropertyChanged(nameof(ActiveOutputChannels));
         UpdateMappingActivity();
+        RefreshPreview();
     }
 
     partial void OnStatusTextChanged(string value) => OnPropertyChanged(nameof(HasStatusMessage));
@@ -481,7 +485,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private async Task ExportAsync(string path)
     {
-        if (_packedImage is null)
+        if (_sources.Count == 0 || Mappings.Count != 4)
         {
             StatusText = "Nothing to export.";
             return;
@@ -489,8 +493,10 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 
         try
         {
+            using var packedImage = ChannelPackingService.Pack(GetPackingSources(), GetPreviewMappings(), FlipY);
+
             await _exportAsync(
-                _packedImage,
+                packedImage,
                 path,
                 new ExportSettings(SelectedExportFormat, GenerateMipMaps),
                 CancellationToken.None);
@@ -505,8 +511,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 
     private void RefreshPreview()
     {
-        _packedImage?.Dispose();
-        _packedImage = null;
+        _previewPackedImage?.Dispose();
+        _previewPackedImage = null;
 
         if (_sources.Count == 0 || Mappings.Count != 4)
         {
@@ -517,26 +523,39 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 
         try
         {
-            _packedImage = ChannelPackingService.Pack(GetPackingSources(), Mappings.Select(m => m.Mapping).ToList(), FlipY);
+            using var previewSources = CreatePreviewSourceSet();
+            _previewPackedImage = ChannelPackingService.Pack(previewSources.Sources, GetPreviewMappings(), FlipY);
         }
         catch (Exception ex)
         {
-            _packedImage?.Dispose();
-            _packedImage = null;
+            _previewPackedImage?.Dispose();
+            _previewPackedImage = null;
             OutputSizeText = "Output: -";
             PreviewBitmap = null;
             StatusText = ex.Message;
             return;
         }
 
-        OutputSizeText = $"Output: {_packedImage.Width} x {_packedImage.Height}";
-        StatusText = _packedImage.HadResizedSources
+        var outputSources = GetPackingSources();
+        OutputSizeText = $"Output: {outputSources[0].Width} x {outputSources[0].Height}";
+        StatusText = HasResizedOriginalSources(outputSources)
             ? "Some sources were resized to match the first image."
             : "Ready.";
 
+        RenderPreviewBitmap();
+    }
+
+    private void RenderPreviewBitmap()
+    {
+        if (_previewPackedImage is null)
+        {
+            PreviewBitmap = null;
+            return;
+        }
+
         try
         {
-            using var previewImage = PreviewImageFactory.Create(_packedImage, PreviewMode);
+            using var previewImage = PreviewImageFactory.Create(_previewPackedImage, PreviewMode);
             using var stream = new MemoryStream();
             previewImage.SaveAsPng(stream);
             stream.Position = 0;
@@ -548,6 +567,76 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             StatusText = $"Preview failed: {ex.Message}";
         }
     }
+
+    private PreviewSourceSet CreatePreviewSourceSet()
+    {
+        var packingSources = GetPackingSources();
+        var (previewWidth, previewHeight) = GetPreviewSize(packingSources[0].Width, packingSources[0].Height);
+        var previewSources = new List<SourceImage>(packingSources.Count);
+        var ownedImages = new List<Image<Rgba32>>(packingSources.Count);
+
+        try
+        {
+            foreach (var source in packingSources)
+            {
+                var previewPixels = source.Pixels.Clone(context => context.Resize(new ResizeOptions
+                {
+                    Mode = ResizeMode.Stretch,
+                    Size = new Size(previewWidth, previewHeight)
+                }));
+
+                ownedImages.Add(previewPixels);
+                previewSources.Add(source with
+                {
+                    Width = previewWidth,
+                    Height = previewHeight,
+                    Pixels = previewPixels
+                });
+            }
+
+            return new PreviewSourceSet(previewSources, ownedImages);
+        }
+        catch
+        {
+            foreach (var image in ownedImages)
+            {
+                image.Dispose();
+            }
+
+            throw;
+        }
+    }
+
+    private static (int Width, int Height) GetPreviewSize(int width, int height)
+    {
+        var longestSide = Math.Max(width, height);
+        if (longestSide <= PreviewMaxDimension)
+        {
+            return (width, height);
+        }
+
+        var scale = PreviewMaxDimension / (double)longestSide;
+        return (
+            Math.Max(1, (int)Math.Round(width * scale)),
+            Math.Max(1, (int)Math.Round(height * scale)));
+    }
+
+    private static bool HasResizedOriginalSources(IReadOnlyList<SourceImage> sources)
+    {
+        var width = sources[0].Width;
+        var height = sources[0].Height;
+        return sources.Any(source => source.Width != width || source.Height != height);
+    }
+
+    private IReadOnlyList<ChannelMapping> GetPreviewMappings() =>
+        Mappings
+            .Select(mapping => IsOutputChannelActive(mapping.OutputChannel)
+                ? mapping.Mapping
+                : ChannelMapping.ForConstant(
+                    mapping.OutputChannel,
+                    mapping.OutputChannel == ChannelId.A ? ChannelSourceKind.One : ChannelSourceKind.Zero,
+                    mapping.Mapping.IsAutomatic))
+            .ToArray();
 
     private IReadOnlyList<SourceImage> GetPackingSources()
     {
@@ -713,8 +802,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 
         _disposed = true;
 
-        _packedImage?.Dispose();
-        _packedImage = null;
+        _previewPackedImage?.Dispose();
+        _previewPackedImage = null;
 
         PreviewBitmap = null;
         CheckerboardBitmap?.Dispose();
@@ -733,5 +822,26 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         SourceImages.Clear();
         Mappings.Clear();
         _primarySourceId = null;
+    }
+
+    private sealed class PreviewSourceSet : IDisposable
+    {
+        private readonly IReadOnlyList<Image<Rgba32>> _ownedImages;
+
+        public PreviewSourceSet(IReadOnlyList<SourceImage> sources, IReadOnlyList<Image<Rgba32>> ownedImages)
+        {
+            Sources = sources;
+            _ownedImages = ownedImages;
+        }
+
+        public IReadOnlyList<SourceImage> Sources { get; }
+
+        public void Dispose()
+        {
+            foreach (var image in _ownedImages)
+            {
+                image.Dispose();
+            }
+        }
     }
 }

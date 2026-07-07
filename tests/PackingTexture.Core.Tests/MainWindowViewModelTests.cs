@@ -242,6 +242,106 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
+    public async Task SelectedExportFormat_MasksInactiveChannelsInPackedPreview()
+    {
+        var source = CreateSourceImage(
+            Guid.Parse("78787878-7878-7878-7878-787878787878"),
+            "packed.png",
+            1,
+            1,
+            SourceChannelSet.Rgba,
+            new Rgba32(10, 20, 30, 40));
+        source.Detach();
+        using var viewModel = new MainWindowViewModel(
+            importAsync: (_, _) => Task.FromResult(source.Source),
+            exportAsync: (_, _, _, _) => Task.CompletedTask);
+
+        await viewModel.AddImagesAsync(["packed"]);
+        viewModel.SelectedExportFormat = ExportFormat.DdsBc5;
+
+        var packedImage = (PackedImage?)GetPrivateField(viewModel, "_previewPackedImage");
+
+        Assert.NotNull(packedImage);
+        var pixel = packedImage!.Pixels[0, 0];
+        Assert.Equal((byte)10, pixel.R);
+        Assert.Equal((byte)20, pixel.G);
+        Assert.Equal((byte)0, pixel.B);
+        Assert.Equal((byte)255, pixel.A);
+    }
+
+    [Fact]
+    public async Task AddImagesAsync_DownscalesPackedPreviewCache_ForLargeSources()
+    {
+        var source = CreateSourceImage(
+            Guid.Parse("89898989-8989-8989-8989-898989898989"),
+            "large.png",
+            2048,
+            1024,
+            SourceChannelSet.Rgba,
+            new Rgba32(10, 20, 30, 255));
+        source.Detach();
+        using var viewModel = new MainWindowViewModel(
+            importAsync: (_, _) => Task.FromResult(source.Source),
+            exportAsync: (_, _, _, _) => Task.CompletedTask);
+
+        await viewModel.AddImagesAsync(["large"]);
+
+        var previewPackedImage = (PackedImage?)GetPrivateField(viewModel, "_previewPackedImage");
+
+        Assert.NotNull(previewPackedImage);
+        Assert.Equal(1024, previewPackedImage!.Width);
+        Assert.Equal(512, previewPackedImage.Height);
+        Assert.Equal("Output: 2048 x 1024", viewModel.OutputSizeText);
+    }
+
+    [Fact]
+    public async Task PreviewModeChange_ReusesPackedPreviewCache()
+    {
+        var source = CreateSourceImage(
+            Guid.Parse("90909090-9090-9090-9090-909090909090"),
+            "packed.png",
+            4,
+            4,
+            SourceChannelSet.Rgba,
+            new Rgba32(10, 20, 30, 40));
+        source.Detach();
+        using var viewModel = new MainWindowViewModel(
+            importAsync: (_, _) => Task.FromResult(source.Source),
+            exportAsync: (_, _, _, _) => Task.CompletedTask);
+
+        await viewModel.AddImagesAsync(["packed"]);
+        var previewPackedImage = GetPrivateField(viewModel, "_previewPackedImage");
+
+        viewModel.PreviewMode = PreviewMode.A;
+
+        Assert.Same(previewPackedImage, GetPrivateField(viewModel, "_previewPackedImage"));
+    }
+
+    [Fact]
+    public async Task ExportCommand_PacksOriginalOutputSize_WhenPreviewCacheIsDownscaled()
+    {
+        var source = CreateSourceImage(
+            Guid.Parse("91919191-9191-9191-9191-919191919191"),
+            "large.png",
+            2048,
+            1024,
+            SourceChannelSet.Rgba,
+            new Rgba32(10, 20, 30, 255));
+        source.Detach();
+        using var viewModel = new MainWindowViewModel(
+            importAsync: (_, _) => Task.FromResult(source.Source),
+            exportAsync: (packed, _, _, _) =>
+            {
+                Assert.Equal(2048, packed.Width);
+                Assert.Equal(1024, packed.Height);
+                return Task.CompletedTask;
+            });
+
+        await viewModel.AddImagesAsync(["large"]);
+        await viewModel.ExportCommand.ExecuteAsync("C:/tmp/output.dds");
+    }
+
+    [Fact]
     public async Task SuggestedExportFileName_UsesTrimmedCommonSourcePrefix()
     {
         var color = CreateSourceImage(
@@ -394,11 +494,11 @@ public sealed class MainWindowViewModelTests
 
         await viewModel.AddImagesAsync(["C:/tmp/dispose.png"]);
         using var packedPixels = new Image<Rgba32>(2, 2);
-        SetPrivateField(viewModel, "_packedImage", new PackedImage(packedPixels.Clone(), hadResizedSources: false));
+        SetPrivateField(viewModel, "_previewPackedImage", new PackedImage(packedPixels.Clone(), hadResizedSources: false));
 
         viewModel.Dispose();
 
-        var packedImage = (PackedImage?)GetPrivateField(viewModel, "_packedImage");
+        var packedImage = (PackedImage?)GetPrivateField(viewModel, "_previewPackedImage");
 
         Assert.Null(viewModel.PreviewBitmap);
         Assert.Null(packedImage);
