@@ -13,6 +13,9 @@ namespace PackingTexture.App.Views;
 
 public partial class MainWindow : Window
 {
+    private static readonly DataFormat<string> SourceImageDragFormat =
+        DataFormat.CreateInProcessFormat<string>("packingtexture-source-id");
+
     private sealed record ImportPathSplit(string[] AcceptedPaths, string[] RejectedMessages);
 
     private static readonly HashSet<string> SupportedImportExtensions = new(StringComparer.OrdinalIgnoreCase)
@@ -219,6 +222,67 @@ public partial class MainWindow : Window
         string.IsNullOrWhiteSpace(currentStatus)
             ? nextStatus
             : $"{currentStatus} {nextStatus}";
+
+    private async void SourceDragHandle_OnPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (sender is not Control control || control.DataContext is not SourceImageViewModel source)
+        {
+            return;
+        }
+
+        if (DataContext is not MainWindowViewModel viewModel)
+        {
+            return;
+        }
+
+        try
+        {
+            var data = new DataTransfer();
+            data.Add(DataTransferItem.Create(SourceImageDragFormat, source.Id.ToString()));
+            await DragDrop.DoDragDropAsync(e, data, DragDropEffects.Move);
+            e.Handled = true;
+        }
+        catch (Exception ex)
+        {
+            viewModel.StatusText = $"Drag failed: {ex.Message}";
+        }
+    }
+
+    private void SourceCard_OnDragOver(object? sender, DragEventArgs e)
+    {
+        if (!e.DataTransfer.Contains(SourceImageDragFormat))
+        {
+            return;
+        }
+
+        e.DragEffects = DragDropEffects.Move;
+        e.Handled = true;
+    }
+
+    private void SourceCard_OnDrop(object? sender, DragEventArgs e)
+    {
+        if (sender is not Control control ||
+            control.DataContext is not SourceImageViewModel target ||
+            DataContext is not MainWindowViewModel viewModel)
+        {
+            return;
+        }
+
+        var sourceIdText = e.DataTransfer.TryGetValue(SourceImageDragFormat);
+        if (!Guid.TryParse(sourceIdText, out var sourceId))
+        {
+            return;
+        }
+
+        var source = viewModel.SourceImages.FirstOrDefault(image => image.Id == sourceId);
+        if (source is null)
+        {
+            return;
+        }
+
+        viewModel.MoveSourceBefore(source, target);
+        e.Handled = true;
+    }
 
     private void PreviewMode_OnClick(object? sender, RoutedEventArgs e)
     {

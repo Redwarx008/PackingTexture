@@ -144,6 +144,52 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
+    public async Task MoveSourceBefore_ReordersVisibleSources_ForDragDrop()
+    {
+        var first = CreateSourceImage(
+            Guid.Parse("55555555-5555-5555-5555-555555555555"),
+            "first.png",
+            2,
+            2,
+            SourceChannelSet.Rgb,
+            new Rgba32(10, 20, 30, 255));
+        var second = CreateSourceImage(
+            Guid.Parse("66666666-6666-6666-6666-666666666666"),
+            "second.png",
+            2,
+            2,
+            SourceChannelSet.Gray,
+            new Rgba32(40, 40, 40, 255));
+        var third = CreateSourceImage(
+            Guid.Parse("77777777-7777-7777-7777-777777777777"),
+            "third.png",
+            2,
+            2,
+            SourceChannelSet.Gray,
+            new Rgba32(70, 70, 70, 255));
+        first.Detach();
+        second.Detach();
+        third.Detach();
+
+        using var viewModel = new MainWindowViewModel(
+            importAsync: (path, _) => Task.FromResult(path switch
+            {
+                "first" => first.Source,
+                "second" => second.Source,
+                _ => third.Source
+            }),
+            exportAsync: (_, _, _, _) => Task.CompletedTask);
+
+        await viewModel.AddImagesAsync(["first", "second", "third"]);
+
+        viewModel.MoveSourceBefore(viewModel.SourceImages[2], viewModel.SourceImages[0]);
+
+        Assert.Equal(["third.png", "first.png", "second.png"], viewModel.SourceImages.Select(source => source.FileName).ToArray());
+        var coreSources = (IReadOnlyList<SourceImage>)GetPrivateField(viewModel, "_sources")!;
+        Assert.Equal(["third.png", "first.png", "second.png"], coreSources.Select(source => source.FileName).ToArray());
+    }
+
+    [Fact]
     public void ExportFormatOptions_UseReadableLabels()
     {
         var viewModel = new MainWindowViewModel();

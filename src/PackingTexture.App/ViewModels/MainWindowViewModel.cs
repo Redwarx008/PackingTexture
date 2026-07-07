@@ -403,6 +403,29 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         ApplyAutomaticMappings();
     }
 
+    public void MoveSourceBefore(SourceImageViewModel source, SourceImageViewModel target)
+    {
+        var sourceIndex = SourceImages.IndexOf(source);
+        var targetIndex = SourceImages.IndexOf(target);
+        if (sourceIndex < 0 || targetIndex < 0 || sourceIndex == targetIndex)
+        {
+            return;
+        }
+
+        if (sourceIndex < targetIndex)
+        {
+            targetIndex--;
+        }
+
+        SourceImages.Move(sourceIndex, targetIndex);
+
+        var core = _sources[sourceIndex];
+        _sources.RemoveAt(sourceIndex);
+        _sources.Insert(targetIndex, core);
+
+        ApplyAutomaticMappings();
+    }
+
     public void ApplyAutomaticMappings()
     {
         var sourceImages = SourceImages.ToArray();
