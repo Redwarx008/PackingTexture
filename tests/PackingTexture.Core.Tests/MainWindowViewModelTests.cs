@@ -144,6 +144,39 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
+    public async Task ClearCommand_RemovesSourcesMappingsAndPreview()
+    {
+        var sourceScope = CreateSourceImage(
+            Guid.Parse("13131313-1313-1313-1313-131313131313"),
+            "clear.png",
+            2,
+            2,
+            SourceChannelSet.Rgba,
+            new Rgba32(10, 20, 30, 40));
+        var source = sourceScope.Source;
+        sourceScope.Detach();
+        using var viewModel = new MainWindowViewModel(
+            importAsync: (_, _) => Task.FromResult(source),
+            exportAsync: (_, _, _, _) => Task.CompletedTask);
+
+        await viewModel.AddImagesAsync(["C:/tmp/clear.png"]);
+        Assert.NotEmpty(viewModel.SourceImages);
+        Assert.NotEmpty(viewModel.Mappings);
+        Assert.NotNull(GetPrivateField(viewModel, "_previewPackedImage"));
+
+        viewModel.ClearCommand.Execute(null);
+
+        Assert.Empty(viewModel.SourceImages);
+        Assert.Empty(viewModel.Mappings);
+        Assert.Null(viewModel.PreviewBitmap);
+        Assert.Equal("Output: -", viewModel.OutputSizeText);
+        Assert.Equal("Add images to begin.", viewModel.StatusText);
+        Assert.Null(GetPrivateField(viewModel, "_primarySourceId"));
+        Assert.Null(GetPrivateField(viewModel, "_previewPackedImage"));
+        Assert.Throws<ObjectDisposedException>(() => source.Pixels.Clone());
+    }
+
+    [Fact]
     public async Task MoveSourceBefore_ReordersVisibleSources_ForDragDrop()
     {
         var first = CreateSourceImage(

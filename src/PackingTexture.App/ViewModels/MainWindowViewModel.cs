@@ -483,6 +483,16 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     private void SetPreviewMode(PreviewMode mode) => PreviewMode = mode;
 
     [RelayCommand]
+    private void Clear()
+    {
+        ClearImportedState();
+        StatusText = "Add images to begin.";
+        OutputSizeText = "Output: -";
+        OnPropertyChanged(nameof(SuggestedExportFileName));
+        OnPropertyChanged(nameof(SuggestedExportDirectory));
+    }
+
+    [RelayCommand]
     private async Task ExportAsync(string path)
     {
         if (_sources.Count == 0 || Mappings.Count != 4)
@@ -756,6 +766,29 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         return first[..length];
     }
 
+    private void ClearImportedState()
+    {
+        _previewPackedImage?.Dispose();
+        _previewPackedImage = null;
+        PreviewBitmap = null;
+
+        foreach (var sourceImage in SourceImages)
+        {
+            sourceImage.Dispose();
+        }
+
+        foreach (var source in _sources)
+        {
+            source.Pixels.Dispose();
+        }
+
+        _sources.Clear();
+        SourceImages.Clear();
+        Mappings.Clear();
+        _primarySourceId = null;
+        _suggestedExportDirectory = null;
+    }
+
     private static AvaloniaBitmap? TryCreateCheckerboardBitmap()
     {
         try
@@ -793,26 +826,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 
         _disposed = true;
 
-        _previewPackedImage?.Dispose();
-        _previewPackedImage = null;
-
-        PreviewBitmap = null;
+        ClearImportedState();
         CheckerboardBitmap?.Dispose();
-
-        foreach (var sourceImage in SourceImages)
-        {
-            sourceImage.Dispose();
-        }
-
-        foreach (var source in _sources)
-        {
-            source.Pixels.Dispose();
-        }
-
-        _sources.Clear();
-        SourceImages.Clear();
-        Mappings.Clear();
-        _primarySourceId = null;
     }
 
     private sealed class PreviewSourceSet : IDisposable
