@@ -87,7 +87,7 @@
                 BorderThickness="0,1"
                 Padding="14"
                 MinHeight="54">
-          <TextBlock Text="Drag PNG / TGA / BMP / JPG source images here"
+          <TextBlock Text="Drag PNG / TIF / TGA / BMP / JPG source images here"
                      FontSize="16"
                      Foreground="#5B6B7F"
                      HorizontalAlignment="Center"

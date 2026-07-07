@@ -25,7 +25,9 @@ public partial class MainWindow : Window
         ".jpg",
         ".jpeg",
         ".bmp",
-        ".tga"
+        ".tga",
+        ".tif",
+        ".tiff"
     };
 
     public MainWindow()
@@ -67,7 +69,9 @@ public partial class MainWindow : Window
                             "*.jpg",
                             "*.jpeg",
                             "*.bmp",
-                            "*.tga"
+                            "*.tga",
+                            "*.tif",
+                            "*.tiff"
                         ]
                     }
                 ]
