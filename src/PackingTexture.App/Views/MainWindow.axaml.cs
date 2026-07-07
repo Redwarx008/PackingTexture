@@ -106,7 +106,7 @@ public partial class MainWindow : Window
             {
                 Title = "Export Packed Texture",
                 DefaultExtension = extension,
-                SuggestedFileName = $"packed.{extension}",
+                SuggestedFileName = viewModel.SuggestedExportFileName,
                 FileTypeChoices =
                 [
                     new FilePickerFileType(extension.Equals("png", StringComparison.OrdinalIgnoreCase) ? "PNG Image" : "DDS Texture")

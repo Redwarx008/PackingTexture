@@ -199,6 +199,85 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
+    public async Task SuggestedExportFileName_UsesTrimmedCommonSourcePrefix()
+    {
+        var color = CreateSourceImage(
+            Guid.Parse("88888888-8888-8888-8888-888888888888"),
+            "Grass005_1K-PNG_Color.png",
+            2,
+            2,
+            SourceChannelSet.Rgb,
+            new Rgba32(10, 20, 30, 255));
+        var displacement = CreateSourceImage(
+            Guid.Parse("99999999-9999-9999-9999-999999999999"),
+            "Grass005_1K-PNG_Displacement.png",
+            2,
+            2,
+            SourceChannelSet.Gray,
+            new Rgba32(40, 40, 40, 255));
+        color.Detach();
+        displacement.Detach();
+
+        using var viewModel = new MainWindowViewModel(
+            importAsync: (path, _) => Task.FromResult(path == "color" ? color.Source : displacement.Source),
+            exportAsync: (_, _, _, _) => Task.CompletedTask);
+
+        await viewModel.AddImagesAsync(["color", "displacement"]);
+
+        Assert.Equal("Grass005_1K-PNG.dds", viewModel.SuggestedExportFileName);
+    }
+
+    [Fact]
+    public async Task SuggestedExportFileName_UsesSelectedExportExtension()
+    {
+        var source = CreateSourceImage(
+            Guid.Parse("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee"),
+            "Mask_RGB.png",
+            2,
+            2,
+            SourceChannelSet.Rgba,
+            new Rgba32(10, 20, 30, 255));
+        source.Detach();
+        using var viewModel = new MainWindowViewModel(
+            importAsync: (_, _) => Task.FromResult(source.Source),
+            exportAsync: (_, _, _, _) => Task.CompletedTask);
+
+        await viewModel.AddImagesAsync(["mask"]);
+        viewModel.SelectedExportFormat = ExportFormat.Png;
+
+        Assert.Equal("Mask_RGB.png", viewModel.SuggestedExportFileName);
+    }
+
+    [Fact]
+    public async Task SuggestedExportFileName_FallsBackToFirstSource_WhenCommonPrefixIsTooShort()
+    {
+        var color = CreateSourceImage(
+            Guid.Parse("12121212-1212-1212-1212-121212121212"),
+            "A_Color.png",
+            2,
+            2,
+            SourceChannelSet.Rgb,
+            new Rgba32(10, 20, 30, 255));
+        var alpha = CreateSourceImage(
+            Guid.Parse("34343434-3434-3434-3434-343434343434"),
+            "B_Alpha.png",
+            2,
+            2,
+            SourceChannelSet.Gray,
+            new Rgba32(40, 40, 40, 255));
+        color.Detach();
+        alpha.Detach();
+
+        using var viewModel = new MainWindowViewModel(
+            importAsync: (path, _) => Task.FromResult(path == "color" ? color.Source : alpha.Source),
+            exportAsync: (_, _, _, _) => Task.CompletedTask);
+
+        await viewModel.AddImagesAsync(["color", "alpha"]);
+
+        Assert.Equal("A_Color.dds", viewModel.SuggestedExportFileName);
+    }
+
+    [Fact]
     public async Task ExportCommand_ReportsInlineStatus_WhenExporterFails()
     {
         var goodSource = CreateSourceImage(

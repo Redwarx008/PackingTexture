@@ -332,6 +332,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         }
     }
 
+    public string SuggestedExportFileName => $"{InferExportBaseName()}.{GetExportExtension()}";
+
     public bool HasStatusMessage =>
         !string.IsNullOrWhiteSpace(StatusText) &&
         !StatusText.Equals("Ready.", StringComparison.OrdinalIgnoreCase) &&
@@ -349,6 +351,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                 _primarySourceId ??= source.Id;
                 _sources.Add(source);
                 SourceImages.Add(new SourceImageViewModel(source));
+                OnPropertyChanged(nameof(SuggestedExportFileName));
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -446,7 +449,11 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 
     partial void OnPreviewModeChanged(PreviewMode value) => RefreshPreview();
 
-    partial void OnSelectedExportFormatChanged(ExportFormat value) => OnPropertyChanged(nameof(SelectedExportFormatOption));
+    partial void OnSelectedExportFormatChanged(ExportFormat value)
+    {
+        OnPropertyChanged(nameof(SelectedExportFormatOption));
+        OnPropertyChanged(nameof(SuggestedExportFileName));
+    }
 
     partial void OnStatusTextChanged(string value) => OnPropertyChanged(nameof(HasStatusMessage));
 
@@ -571,6 +578,50 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         string.IsNullOrWhiteSpace(currentStatus)
             ? nextStatus
             : $"{currentStatus} {nextStatus}";
+
+    private string InferExportBaseName()
+    {
+        var names = _sources
+            .Select(source => Path.GetFileNameWithoutExtension(source.FileName))
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .ToArray();
+
+        if (names.Length == 0)
+        {
+            return "packed";
+        }
+
+        if (names.Length == 1)
+        {
+            return names[0];
+        }
+
+        var prefix = FindCommonPrefix(names).TrimEnd(' ', '_', '-', '.');
+        return prefix.Length >= 3 ? prefix : names[0];
+    }
+
+    private string GetExportExtension() => SelectedExportFormat == ExportFormat.Png ? "png" : "dds";
+
+    private static string FindCommonPrefix(IReadOnlyList<string> names)
+    {
+        var first = names[0];
+        var length = first.Length;
+
+        for (var nameIndex = 1; nameIndex < names.Count; nameIndex++)
+        {
+            length = Math.Min(length, names[nameIndex].Length);
+            for (var charIndex = 0; charIndex < length; charIndex++)
+            {
+                if (first[charIndex] != names[nameIndex][charIndex])
+                {
+                    length = charIndex;
+                    break;
+                }
+            }
+        }
+
+        return first[..length];
+    }
 
     private static AvaloniaBitmap? TryCreateCheckerboardBitmap()
     {
