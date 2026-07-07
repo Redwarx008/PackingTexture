@@ -1,0 +1,72 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build Windows x64 AOT release
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore
+        run: dotnet restore PackingTexture.sln
+
+      - name: Test
+        run: dotnet test PackingTexture.sln -c Release --no-restore
+
+      - name: Publish GUI Native AOT
+        run: >
+          dotnet publish src\PackingTexture.App\PackingTexture.App.csproj
+          -c Release
+          -r win-x64
+          --self-contained true
+          -p:PublishAot=true
+          -p:BuiltInComInteropSupport=false
+          -p:DebugType=None
+          -p:DebugSymbols=false
+          -o artifacts\PackingTexture.App-win-x64-aot
+
+      - name: Publish CLI Native AOT
+        run: >
+          dotnet publish src\PackingTexture.Cli\PackingTexture.Cli.csproj
+          -c Release
+          -r win-x64
+          --self-contained true
+          -p:PublishAot=true
+          -p:DebugType=None
+          -p:DebugSymbols=false
+          -o artifacts\PackingTexture.Cli-win-x64-aot
+
+      - name: Remove debug symbols
+        shell: pwsh
+        run: Get-ChildItem artifacts -Recurse -Filter *.pdb | Remove-Item -Force
+
+      - name: Package artifacts
+        shell: pwsh
+        run: |
+          Compress-Archive -Path artifacts\PackingTexture.App-win-x64-aot\* -DestinationPath artifacts\PackingTexture.App-win-x64-aot.zip -Force
+          Compress-Archive -Path artifacts\PackingTexture.Cli-win-x64-aot\* -DestinationPath artifacts\PackingTexture.Cli-win-x64-aot.zip -Force
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: |
+            artifacts/PackingTexture.App-win-x64-aot.zip
+            artifacts/PackingTexture.Cli-win-x64-aot.zip

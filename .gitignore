@@ -4,6 +4,7 @@
 bin/
 obj/
 .vs/
+artifacts/
 *.user
 *.suo
 
