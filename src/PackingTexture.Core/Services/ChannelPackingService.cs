@@ -175,6 +175,12 @@ public static class ChannelPackingService
 
     private static byte ResolveByte(ChannelMapping mapping, DisposableImageLookup images, int x, int y)
     {
+        var value = ResolveRawByte(mapping, images, x, y);
+        return mapping.Invert ? (byte)(255 - value) : value;
+    }
+
+    private static byte ResolveRawByte(ChannelMapping mapping, DisposableImageLookup images, int x, int y)
+    {
         if (mapping.SourceKind == ChannelSourceKind.Zero)
         {
             return 0;

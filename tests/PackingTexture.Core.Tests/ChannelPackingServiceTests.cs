@@ -93,6 +93,26 @@ public sealed class ChannelPackingServiceTests
     }
 
     [Fact]
+    public void Pack_InvertsMappedChannel_WhenMappingRequestsInvert()
+    {
+        var sourceId = Guid.Parse("cccccccc-cccc-cccc-cccc-cccccccccccc");
+        using var image = new Image<Rgba32>(1, 1);
+        image[0, 0] = new Rgba32(10, 20, 30, 40);
+        var source = new SourceImage(sourceId, "Source.png", 1, 1, SourceChannelSet.Rgba, image);
+        var mappings = new[]
+        {
+            ChannelMapping.ForSource(ChannelId.R, sourceId, ChannelId.R, invert: true),
+            ChannelMapping.ForSource(ChannelId.G, sourceId, ChannelId.G),
+            ChannelMapping.ForConstant(ChannelId.B, ChannelSourceKind.Zero, invert: true),
+            ChannelMapping.ForSource(ChannelId.A, sourceId, ChannelId.A, invert: true)
+        };
+
+        using var packed = ChannelPackingService.Pack([source], mappings, flipGreen: false);
+
+        Assert.Equal(new Rgba32(245, 20, 255, 215), packed.Pixels[0, 0]);
+    }
+
+    [Fact]
     public void Pack_ResizesNonPrimarySourcesToFirstSourceSize()
     {
         var firstId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");

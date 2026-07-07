@@ -629,14 +629,9 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     }
 
     private IReadOnlyList<ChannelMapping> GetPreviewMappings() =>
-        Mappings
-            .Select(mapping => IsOutputChannelActive(mapping.OutputChannel)
-                ? mapping.Mapping
-                : ChannelMapping.ForConstant(
-                    mapping.OutputChannel,
-                    mapping.OutputChannel == ChannelId.A ? ChannelSourceKind.One : ChannelSourceKind.Zero,
-                    mapping.Mapping.IsAutomatic))
-            .ToArray();
+        ExportFormatChannelPolicy.MaskInactiveMappings(
+            SelectedExportFormat,
+            Mappings.Select(mapping => mapping.Mapping).ToArray());
 
     private IReadOnlyList<SourceImage> GetPackingSources()
     {
@@ -717,15 +712,11 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         }
     }
 
-    private bool IsOutputChannelActive(ChannelId channel) => ActiveOutputChannels.Contains(channel);
+    private bool IsOutputChannelActive(ChannelId channel) =>
+        ExportFormatChannelPolicy.IsOutputChannelActive(SelectedExportFormat, channel);
 
-    private static IReadOnlyList<ChannelId> GetActiveOutputChannels(ExportFormat format) => format switch
-    {
-        ExportFormat.DdsBc1 => [ChannelId.R, ChannelId.G, ChannelId.B],
-        ExportFormat.DdsBc4 => [ChannelId.R],
-        ExportFormat.DdsBc5 => [ChannelId.R, ChannelId.G],
-        _ => [ChannelId.R, ChannelId.G, ChannelId.B, ChannelId.A]
-    };
+    private static IReadOnlyList<ChannelId> GetActiveOutputChannels(ExportFormat format) =>
+        ExportFormatChannelPolicy.GetActiveOutputChannels(format);
 
     private void SetSuggestedExportDirectoryIfNeeded(string path)
     {
