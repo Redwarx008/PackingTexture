@@ -278,6 +278,39 @@ public sealed class MainWindowViewModelTests
     }
 
     [Fact]
+    public async Task SuggestedExportDirectory_UsesFirstSuccessfullyImportedSourceDirectory()
+    {
+        var first = CreateSourceImage(
+            Guid.Parse("45454545-4545-4545-4545-454545454545"),
+            "first.png",
+            2,
+            2,
+            SourceChannelSet.Rgb,
+            new Rgba32(10, 20, 30, 255));
+        var second = CreateSourceImage(
+            Guid.Parse("56565656-5656-5656-5656-565656565656"),
+            "second.png",
+            2,
+            2,
+            SourceChannelSet.Gray,
+            new Rgba32(40, 40, 40, 255));
+        first.Detach();
+        second.Detach();
+
+        using var viewModel = new MainWindowViewModel(
+            importAsync: (path, _) => Task.FromResult(path.Contains("first", StringComparison.OrdinalIgnoreCase) ? first.Source : second.Source),
+            exportAsync: (_, _, _, _) => Task.CompletedTask);
+
+        await viewModel.AddImagesAsync(
+        [
+            "D:/Textures/Grass/first.png",
+            "E:/Other/second.png"
+        ]);
+
+        Assert.Equal(Path.GetFullPath("D:/Textures/Grass"), viewModel.SuggestedExportDirectory);
+    }
+
+    [Fact]
     public async Task ExportCommand_ReportsInlineStatus_WhenExporterFails()
     {
         var goodSource = CreateSourceImage(

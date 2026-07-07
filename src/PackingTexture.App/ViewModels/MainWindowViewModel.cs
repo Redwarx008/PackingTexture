@@ -250,6 +250,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     private Guid? _primarySourceId;
     private PackedImage? _packedImage;
     private AvaloniaBitmap? _previewBitmap;
+    private string? _suggestedExportDirectory;
     private bool _disposed;
 
     public MainWindowViewModel()
@@ -334,6 +335,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 
     public string SuggestedExportFileName => $"{InferExportBaseName()}.{GetExportExtension()}";
 
+    public string? SuggestedExportDirectory => _suggestedExportDirectory;
+
     public bool HasStatusMessage =>
         !string.IsNullOrWhiteSpace(StatusText) &&
         !StatusText.Equals("Ready.", StringComparison.OrdinalIgnoreCase) &&
@@ -349,6 +352,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             {
                 var source = await _importAsync(path, cancellationToken);
                 _primarySourceId ??= source.Id;
+                SetSuggestedExportDirectoryIfNeeded(path);
                 _sources.Add(source);
                 SourceImages.Add(new SourceImageViewModel(source));
                 OnPropertyChanged(nameof(SuggestedExportFileName));
@@ -601,6 +605,23 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     }
 
     private string GetExportExtension() => SelectedExportFormat == ExportFormat.Png ? "png" : "dds";
+
+    private void SetSuggestedExportDirectoryIfNeeded(string path)
+    {
+        if (!string.IsNullOrWhiteSpace(_suggestedExportDirectory))
+        {
+            return;
+        }
+
+        var directory = Path.GetDirectoryName(path);
+        if (string.IsNullOrWhiteSpace(directory))
+        {
+            return;
+        }
+
+        _suggestedExportDirectory = Path.GetFullPath(directory);
+        OnPropertyChanged(nameof(SuggestedExportDirectory));
+    }
 
     private static string FindCommonPrefix(IReadOnlyList<string> names)
     {

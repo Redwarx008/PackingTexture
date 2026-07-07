@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.IO;
+using System.Threading.Tasks;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
@@ -102,11 +103,13 @@ public partial class MainWindow : Window
         try
         {
             var extension = viewModel.SelectedExportFormat == ExportFormat.Png ? "png" : "dds";
+            var suggestedStartLocation = await TryGetSuggestedExportFolderAsync(viewModel);
             var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
             {
                 Title = "Export Packed Texture",
                 DefaultExtension = extension,
                 SuggestedFileName = viewModel.SuggestedExportFileName,
+                SuggestedStartLocation = suggestedStartLocation,
                 FileTypeChoices =
                 [
                     new FilePickerFileType(extension.Equals("png", StringComparison.OrdinalIgnoreCase) ? "PNG Image" : "DDS Texture")
@@ -131,6 +134,23 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             viewModel.StatusText = $"Export failed: {ex.Message}";
+        }
+    }
+
+    private async Task<IStorageFolder?> TryGetSuggestedExportFolderAsync(MainWindowViewModel viewModel)
+    {
+        if (string.IsNullOrWhiteSpace(viewModel.SuggestedExportDirectory))
+        {
+            return null;
+        }
+
+        try
+        {
+            return await StorageProvider.TryGetFolderFromPathAsync(new Uri(viewModel.SuggestedExportDirectory));
+        }
+        catch (UriFormatException)
+        {
+            return null;
         }
     }
 
