@@ -553,15 +553,16 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     {
         try
         {
-            using var image = new Image<SixLabors.ImageSharp.PixelFormats.Rgba32>(32, 32);
+            using var image = new Image<SixLabors.ImageSharp.PixelFormats.Rgba32>(768, 512);
             var light = new SixLabors.ImageSharp.PixelFormats.Rgba32(245, 248, 252, 255);
             var dark = new SixLabors.ImageSharp.PixelFormats.Rgba32(225, 232, 242, 255);
+            const int tileSize = 16;
 
             for (var y = 0; y < image.Height; y++)
             {
                 for (var x = 0; x < image.Width; x++)
                 {
-                    image[x, y] = ((x / 16) + (y / 16)) % 2 == 0 ? light : dark;
+                    image[x, y] = ((x / tileSize) + (y / tileSize)) % 2 == 0 ? light : dark;
                 }
             }
 

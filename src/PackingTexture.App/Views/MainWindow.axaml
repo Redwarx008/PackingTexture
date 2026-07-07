@@ -199,16 +199,21 @@
                     Background="#EEF3F8">
               <Image Source="{Binding CheckerboardBitmap}" Stretch="Fill" />
             </Border>
-            <Image Source="{Binding PreviewBitmap}" Stretch="Uniform" Margin="22" />
+            <Image Source="{Binding PreviewBitmap}"
+                   Stretch="Uniform"
+                   MaxWidth="420"
+                   MaxHeight="420"
+                   HorizontalAlignment="Center"
+                   VerticalAlignment="Center" />
           </Grid>
         </Border>
 
         <Grid Grid.Row="2" ColumnDefinitions="*,*,*,*,*" ColumnSpacing="8" Margin="14,10,14,12">
-          <Button Grid.Column="0" Classes="previewMode" Content="RGBA" Click="PreviewMode_OnClick" Tag="Rgba" />
-          <Button Grid.Column="1" Classes="previewMode" Content="R" Click="PreviewMode_OnClick" Tag="R" />
-          <Button Grid.Column="2" Classes="previewMode" Content="G" Click="PreviewMode_OnClick" Tag="G" />
-          <Button Grid.Column="3" Classes="previewMode" Content="B" Click="PreviewMode_OnClick" Tag="B" />
-          <Button Grid.Column="4" Classes="previewMode" Content="A" Click="PreviewMode_OnClick" Tag="A" />
+          <Button Grid.Column="0" Classes="previewMode" Content="RGBA" Click="PreviewMode_OnClick" Tag="Rgba" HorizontalAlignment="Stretch" />
+          <Button Grid.Column="1" Classes="previewMode" Content="R" Click="PreviewMode_OnClick" Tag="R" HorizontalAlignment="Stretch" />
+          <Button Grid.Column="2" Classes="previewMode" Content="G" Click="PreviewMode_OnClick" Tag="G" HorizontalAlignment="Stretch" />
+          <Button Grid.Column="3" Classes="previewMode" Content="B" Click="PreviewMode_OnClick" Tag="B" HorizontalAlignment="Stretch" />
+          <Button Grid.Column="4" Classes="previewMode" Content="A" Click="PreviewMode_OnClick" Tag="A" HorizontalAlignment="Stretch" />
         </Grid>
 
         <Border Grid.Row="3" BorderBrush="#CBD5E1" BorderThickness="0,1,0,0" Padding="14,14,14,14">
