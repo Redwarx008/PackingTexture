@@ -198,6 +198,49 @@ public sealed class MainWindowViewModelTests
         Assert.Equal("DDS BC7", viewModel.SelectedExportFormatOption?.DisplayName);
     }
 
+    [Theory]
+    [InlineData(ExportFormat.Png, "R,G,B,A")]
+    [InlineData(ExportFormat.DdsBc1, "R,G,B")]
+    [InlineData(ExportFormat.DdsBc3, "R,G,B,A")]
+    [InlineData(ExportFormat.DdsBc4, "R")]
+    [InlineData(ExportFormat.DdsBc5, "R,G")]
+    [InlineData(ExportFormat.DdsBc7, "R,G,B,A")]
+    public void SelectedExportFormat_ControlsActiveOutputChannels(ExportFormat format, string expectedChannels)
+    {
+        var viewModel = new MainWindowViewModel
+        {
+            SelectedExportFormat = format
+        };
+
+        var expected = expectedChannels.Split(',').Select(Enum.Parse<ChannelId>).ToArray();
+
+        Assert.Equal(expected, viewModel.ActiveOutputChannels);
+    }
+
+    [Fact]
+    public async Task SelectedExportFormat_DisablesInactiveMappingRows()
+    {
+        var source = CreateSourceImage(
+            Guid.Parse("67676767-6767-6767-6767-676767676767"),
+            "packed.png",
+            2,
+            2,
+            SourceChannelSet.Rgba,
+            new Rgba32(10, 20, 30, 255));
+        source.Detach();
+        using var viewModel = new MainWindowViewModel(
+            importAsync: (_, _) => Task.FromResult(source.Source),
+            exportAsync: (_, _, _, _) => Task.CompletedTask);
+
+        await viewModel.AddImagesAsync(["packed"]);
+        viewModel.SelectedExportFormat = ExportFormat.DdsBc5;
+
+        Assert.True(viewModel.Mappings.Single(mapping => mapping.OutputChannel == ChannelId.R).IsActiveForExport);
+        Assert.True(viewModel.Mappings.Single(mapping => mapping.OutputChannel == ChannelId.G).IsActiveForExport);
+        Assert.False(viewModel.Mappings.Single(mapping => mapping.OutputChannel == ChannelId.B).IsActiveForExport);
+        Assert.False(viewModel.Mappings.Single(mapping => mapping.OutputChannel == ChannelId.A).IsActiveForExport);
+    }
+
     [Fact]
     public async Task SuggestedExportFileName_UsesTrimmedCommonSourcePrefix()
     {

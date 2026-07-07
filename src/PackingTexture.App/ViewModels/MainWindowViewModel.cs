@@ -95,6 +95,9 @@ public sealed partial class ChannelMappingViewModel : ObservableObject
 
     private ChannelMapping mapping;
 
+    [ObservableProperty]
+    private bool isActiveForExport = true;
+
     public ChannelMappingViewModel(ChannelMapping mapping, Action refreshPreview)
     {
         this.mapping = mapping;
@@ -117,6 +120,8 @@ public sealed partial class ChannelMappingViewModel : ObservableObject
         ChannelId.A => Brushes.SlateGray,
         _ => Brushes.Black
     };
+
+    public double RowOpacity => IsActiveForExport ? 1.0 : 0.38;
 
     public IReadOnlyList<SourceSelectionOption> SourceOptions => _sourceOptions;
 
@@ -176,6 +181,8 @@ public sealed partial class ChannelMappingViewModel : ObservableObject
         OnPropertyChanged(nameof(AvailableSourceChannels));
         OnPropertyChanged(nameof(SelectedSourceChannel));
     }
+
+    public void SetActiveForExport(bool isActive) => IsActiveForExport = isActive;
 
     private IReadOnlyList<SourceSelectionOption> BuildSourceOptions(IReadOnlyList<SourceImageViewModel> sourceImages)
     {
@@ -240,6 +247,8 @@ public sealed partial class ChannelMappingViewModel : ObservableObject
         OnPropertyChanged(nameof(OutputChannel));
         _refreshPreview();
     }
+
+    partial void OnIsActiveForExportChanged(bool value) => OnPropertyChanged(nameof(RowOpacity));
 }
 
 public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
@@ -336,6 +345,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     public string SuggestedExportFileName => $"{InferExportBaseName()}.{GetExportExtension()}";
 
     public string? SuggestedExportDirectory => _suggestedExportDirectory;
+
+    public IReadOnlyList<ChannelId> ActiveOutputChannels => GetActiveOutputChannels(SelectedExportFormat);
 
     public bool HasStatusMessage =>
         !string.IsNullOrWhiteSpace(StatusText) &&
@@ -443,6 +454,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         {
             var viewModel = new ChannelMappingViewModel(mapping, RefreshPreview);
             viewModel.AttachSourceImages(sourceImages);
+            viewModel.SetActiveForExport(IsOutputChannelActive(mapping.OutputChannel));
             Mappings.Add(viewModel);
         }
 
@@ -457,6 +469,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     {
         OnPropertyChanged(nameof(SelectedExportFormatOption));
         OnPropertyChanged(nameof(SuggestedExportFileName));
+        OnPropertyChanged(nameof(ActiveOutputChannels));
+        UpdateMappingActivity();
     }
 
     partial void OnStatusTextChanged(string value) => OnPropertyChanged(nameof(HasStatusMessage));
@@ -605,6 +619,24 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     }
 
     private string GetExportExtension() => SelectedExportFormat == ExportFormat.Png ? "png" : "dds";
+
+    private void UpdateMappingActivity()
+    {
+        foreach (var mapping in Mappings)
+        {
+            mapping.SetActiveForExport(IsOutputChannelActive(mapping.OutputChannel));
+        }
+    }
+
+    private bool IsOutputChannelActive(ChannelId channel) => ActiveOutputChannels.Contains(channel);
+
+    private static IReadOnlyList<ChannelId> GetActiveOutputChannels(ExportFormat format) => format switch
+    {
+        ExportFormat.DdsBc1 => [ChannelId.R, ChannelId.G, ChannelId.B],
+        ExportFormat.DdsBc4 => [ChannelId.R],
+        ExportFormat.DdsBc5 => [ChannelId.R, ChannelId.G],
+        _ => [ChannelId.R, ChannelId.G, ChannelId.B, ChannelId.A]
+    };
 
     private void SetSuggestedExportDirectoryIfNeeded(string path)
     {
